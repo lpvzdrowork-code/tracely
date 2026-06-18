@@ -526,11 +526,38 @@ button, input, select {
 .log-badge.WARN::before { background: var(--warn); }
 .log-badge.ERROR::before { background: var(--error); }
 
+.log-message-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .log-message {
+  flex: 1;
+  min-width: 0;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.log-count {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.log-row.expanded .log-message-wrap {
+  overflow: visible;
+  align-items: flex-start;
 }
 
 .log-row.expanded .log-message {

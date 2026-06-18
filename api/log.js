@@ -28,12 +28,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid log payload' });
   }
 
-  await insertLog({
+  const result = await insertLog({
     level: normalizedLevel,
     message: message.slice(0, 4000),
     timestamp: numericTimestamp,
     gameId: numericGameId,
   });
+
+  if (!result.inserted) {
+    return res.status(429).json({ error: 'Rate limited' });
+  }
 
   return res.status(204).end();
 }

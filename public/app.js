@@ -232,13 +232,19 @@ function renderLogs(logs, total) {
   }
   emptyStateEl.hidden = true;
 
-  const newIds = new Set(logs.map(l => l.id));
+  const logsById = new Map(logs.map((l) => [l.id, l]));
+  const newIds = new Set(logsById.keys());
   const isFirstLoad = knownLogIds.size === 0;
 
-  // Remove rows that are no longer in the list
+  // Remove rows that are no longer in the list; refresh time/count on rows that are
   const existingRows = [...logFeedEl.querySelectorAll('.log-row')];
   existingRows.forEach(row => {
-    if (!newIds.has(Number(row.dataset.id))) row.remove();
+    const id = Number(row.dataset.id);
+    if (!newIds.has(id)) {
+      row.remove();
+    } else {
+      updateLogRow(row, logsById.get(id));
+    }
   });
 
   // Prepend new rows
@@ -250,6 +256,23 @@ function renderLogs(logs, total) {
   }
 
   knownLogIds = newIds;
+}
+
+function updateLogRow(row, log) {
+  const time = row.querySelector('.log-time');
+  if (time) time.textContent = new Date(log.timestamp * 1000).toLocaleTimeString();
+
+  let countEl = row.querySelector('.log-count');
+  if (log.count > 1) {
+    if (!countEl) {
+      countEl = document.createElement('span');
+      countEl.className = 'log-count';
+      row.querySelector('.log-message-wrap')?.appendChild(countEl);
+    }
+    countEl.textContent = `×${log.count}`;
+  } else if (countEl) {
+    countEl.remove();
+  }
 }
 
 function buildLogRow(log, animate = false) {
@@ -269,11 +292,22 @@ function buildLogRow(log, animate = false) {
   badge.className = `log-badge ${log.level}`;
   badge.textContent = log.level;
 
+  const messageWrap = document.createElement('div');
+  messageWrap.className = 'log-message-wrap';
+
   const message = document.createElement('span');
   message.className = 'log-message';
   message.textContent = log.message;
+  messageWrap.appendChild(message);
 
-  row.append(time, game, badge, message);
+  if (log.count > 1) {
+    const countBadge = document.createElement('span');
+    countBadge.className = 'log-count';
+    countBadge.textContent = `×${log.count}`;
+    messageWrap.appendChild(countBadge);
+  }
+
+  row.append(time, game, badge, messageWrap);
 
   row.addEventListener('click', () => {
     row.classList.toggle('expanded');
