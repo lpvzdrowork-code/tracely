@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f0f0f" />
+  <title>Tracely</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <div id="authOverlay" class="auth-overlay">
+    <form id="authForm" class="auth-box">
+      <div class="auth-mark">Tracely</div>
+      <p class="auth-sub">Enter your access key to view logs</p>
+      <input id="authInput" type="password" placeholder="Tracely key" autocomplete="off" autofocus />
+      <button type="submit">Unlock</button>
+      <p id="authError" class="auth-error" hidden>Incorrect key. Try again.</p>
+    </form>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="brand">Tracely</div>
+        <span class="brand-tag">log monitor</span>
+      </div>
+      <div class="status">
+        <span class="dot" id="liveDot"></span>
+        <span id="lastUpdated">waiting for data…</span>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="stats">
+        <div class="stat-card stat-info">
+          <span class="stat-label">Info</span>
+          <span class="stat-value" id="statInfo">0</span>
+        </div>
+        <div class="stat-card stat-warn">
+          <span class="stat-label">Warn</span>
+          <span class="stat-value" id="statWarn">0</span>
+        </div>
+        <div class="stat-card stat-error">
+          <span class="stat-label">Error</span>
+          <span class="stat-value" id="statError">0</span>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2 class="section-title">Activity — last 24 hours</h2>
+        <div class="chart-wrap">
+          <canvas id="activityChart"></canvas>
+        </div>
+      </section>
+
+      <section class="filters">
+        <select id="levelFilter" aria-label="Filter by level">
+          <option value="">All levels</option>
+          <option value="INFO">Info</option>
+          <option value="WARN">Warn</option>
+          <option value="ERROR">Error</option>
+        </select>
+        <input id="gameIdFilter" type="text" placeholder="Filter by gameId…" inputmode="numeric" />
+        <button id="applyFilters">Apply</button>
+        <button id="clearFilters" class="ghost">Clear</button>
+      </section>
+
+      <section class="log-feed-wrap">
+        <div class="log-feed-header">
+          <span>Time</span>
+          <span>Game ID</span>
+          <span>Level</span>
+          <span>Message</span>
+        </div>
+        <div class="log-feed" id="logFeed">
+          <p class="empty-state" id="emptyState" hidden>No logs match these filters yet.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
