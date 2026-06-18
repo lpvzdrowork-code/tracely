@@ -247,6 +247,7 @@ button, input, select {
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 18px;
   display: flex;
@@ -256,9 +257,12 @@ button, input, select {
 }
 
 .stat-card:hover {
-  border-color: #3a3a3a;
   transform: translateY(-1px);
 }
+
+.stat-info { border-left-color: var(--info); }
+.stat-warn { border-left-color: var(--warn); }
+.stat-error { border-left-color: var(--error); }
 
 .stat-label {
   display: flex;
@@ -386,9 +390,9 @@ button, input, select {
 
 .log-feed-header {
   display: grid;
-  grid-template-columns: var(--row-grid);
+  grid-template-columns: var(--row-grid) auto;
   gap: 12px;
-  padding: 10px 36px 10px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-raised);
   font-size: 11px;
@@ -396,6 +400,14 @@ button, input, select {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  align-items: center;
+}
+
+.log-feed-total {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .log-feed {
@@ -424,6 +436,17 @@ button, input, select {
   background: #444444;
 }
 
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .log-row {
   position: relative;
   display: grid;
@@ -436,6 +459,10 @@ button, input, select {
   font-size: 13px;
   cursor: pointer;
   transition: background-color 0.1s var(--ease);
+}
+
+.log-row.new {
+  animation: slideIn 0.25s var(--ease) forwards;
 }
 
 .log-row:last-child {

@@ -15,6 +15,7 @@ const appEl = document.getElementById('app');
 const lastUpdatedEl = document.getElementById('lastUpdated');
 const logFeedEl = document.getElementById('logFeed');
 const emptyStateEl = document.getElementById('emptyState');
+const logTotalEl = document.getElementById('logTotal');
 
 const statInfoEl = document.getElementById('statInfo');
 const statWarnEl = document.getElementById('statWarn');
@@ -102,7 +103,7 @@ async function refresh() {
 
     renderStats(stats);
     renderChart(stats.hourly ?? []);
-    renderLogs(logsData.logs);
+    renderLogs(logsData.logs, logsData.total);
 
     lastUpdatedEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (err) {
@@ -215,24 +216,46 @@ function buildHourBuckets() {
   return buckets;
 }
 
-function renderLogs(logs) {
-  logFeedEl.innerHTML = '';
+let knownLogIds = new Set();
+
+function renderLogs(logs, total) {
+  if (logTotalEl) {
+    logTotalEl.textContent = total != null ? `${total.toLocaleString()} total` : '';
+  }
 
   if (!logs || logs.length === 0) {
+    logFeedEl.innerHTML = '';
     emptyStateEl.hidden = false;
     logFeedEl.appendChild(emptyStateEl);
+    knownLogIds.clear();
     return;
   }
   emptyStateEl.hidden = true;
 
-  for (const log of logs) {
-    logFeedEl.appendChild(buildLogRow(log));
+  const newIds = new Set(logs.map(l => l.id));
+  const isFirstLoad = knownLogIds.size === 0;
+
+  // Remove rows that are no longer in the list
+  const existingRows = [...logFeedEl.querySelectorAll('.log-row')];
+  existingRows.forEach(row => {
+    if (!newIds.has(Number(row.dataset.id))) row.remove();
+  });
+
+  // Prepend new rows
+  for (const log of [...logs].reverse()) {
+    if (!knownLogIds.has(log.id)) {
+      const row = buildLogRow(log, !isFirstLoad);
+      logFeedEl.insertBefore(row, logFeedEl.firstChild);
+    }
   }
+
+  knownLogIds = newIds;
 }
 
-function buildLogRow(log) {
+function buildLogRow(log, animate = false) {
   const row = document.createElement('div');
-  row.className = 'log-row';
+  row.className = 'log-row' + (animate ? ' new' : '');
+  row.dataset.id = log.id;
 
   const time = document.createElement('span');
   time.className = 'log-time';
