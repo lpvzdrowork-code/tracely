@@ -310,16 +310,88 @@ button, input, select {
 
 .filters {
   display: flex;
-  gap: 8px;
+  align-items: flex-end;
   flex-wrap: wrap;
+  gap: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px;
+  padding: 16px 18px;
 }
 
-.filters select,
-.filters input {
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.level-chips {
+  display: flex;
+  gap: 6px;
+}
+
+.level-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.level-chip:hover {
+  border-color: #3a3a3a;
+}
+
+.level-chip input {
+  display: none;
+}
+
+.level-chip::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.4;
+  transition: background-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+
+.level-chip[data-level="INFO"]:has(input:checked) {
+  border-color: var(--info);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--info);
+}
+.level-chip[data-level="WARN"]:has(input:checked) {
+  border-color: var(--warn);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warn);
+}
+.level-chip[data-level="ERROR"]:has(input:checked) {
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error);
+}
+.level-chip[data-level="INFO"]:has(input:checked)::before { background: var(--info); opacity: 1; }
+.level-chip[data-level="WARN"]:has(input:checked)::before { background: var(--warn); opacity: 1; }
+.level-chip[data-level="ERROR"]:has(input:checked)::before { background: var(--error); opacity: 1; }
+
+.filters input[type="text"],
+.filters input[type="datetime-local"] {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -327,24 +399,32 @@ button, input, select {
   padding: 8px 10px;
   font-size: 13px;
   transition: border-color 0.15s var(--ease);
+  color-scheme: dark;
 }
 
-.filters select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888888' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-}
-
-.filters select:hover,
 .filters input:hover {
   border-color: #3a3a3a;
 }
 
-.filters input {
-  flex: 1;
-  min-width: 140px;
+#gameIdFilter {
+  width: 160px;
+}
+
+.time-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-sep {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .filters button {
@@ -352,10 +432,11 @@ button, input, select {
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 8px 16px;
+  padding: 9px 18px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
 }
 
@@ -606,32 +687,16 @@ button, input, select {
     padding: 20px 16px 40px;
   }
 
-  .level-checkboxes {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 4px;
-}
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-.level-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
+  .filter-actions {
+    margin-left: 0;
+  }
 
-.level-check input {
-  accent-color: var(--info);
-  cursor: pointer;
-}
-
-.filters input[type="datetime-local"] {
-  flex: none;
-  min-width: 0;
-  color-scheme: dark;
-}
-
+  #gameIdFilter {
+    width: 100%;
+  }
 }
