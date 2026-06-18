@@ -106,6 +106,7 @@ async function refresh() {
 
     lastUpdatedEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (err) {
+    console.error('refresh error:', err);
     lastUpdatedEl.textContent = 'connection lost — retrying…';
   }
 }
