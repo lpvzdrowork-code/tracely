@@ -60,43 +60,47 @@
       </section>
 
       <section class="filters">
-        <div class="filter-group">
-          <span class="filter-label">Level</span>
-          <div class="level-chips">
-            <label class="level-chip" data-level="INFO">
-              <input type="checkbox" class="level-checkbox" value="INFO" />
-              <span>Info</span>
-            </label>
-            <label class="level-chip" data-level="WARN">
-              <input type="checkbox" class="level-checkbox" value="WARN" />
-              <span>Warn</span>
-            </label>
-            <label class="level-chip" data-level="ERROR">
-              <input type="checkbox" class="level-checkbox" value="ERROR" />
-              <span>Error</span>
-            </label>
-          </div>
-        </div>
+  <div class="filters-row">
+    <div class="filter-group">
+      <span class="filter-label">Level</span>
+      <div class="level-chips">
+        <label class="level-chip" data-level="INFO">
+          <input type="checkbox" class="level-checkbox" value="INFO" />
+          <span>Info</span>
+        </label>
+        <label class="level-chip" data-level="WARN">
+          <input type="checkbox" class="level-checkbox" value="WARN" />
+          <span>Warn</span>
+        </label>
+        <label class="level-chip" data-level="ERROR">
+          <input type="checkbox" class="level-checkbox" value="ERROR" />
+          <span>Error</span>
+        </label>
+      </div>
+    </div>
 
-        <div class="filter-group">
-          <span class="filter-label">Game ID</span>
-          <input id="gameIdFilter" type="text" placeholder="Any game…" inputmode="numeric" />
-        </div>
+    <div class="filter-group">
+      <span class="filter-label">Game ID</span>
+      <input id="gameIdFilter" type="text" placeholder="Any game…" inputmode="numeric" />
+    </div>
 
-        <div class="filter-group">
-          <span class="filter-label">Time range</span>
-          <div class="time-range">
-            <input id="startTimeFilter" type="datetime-local" aria-label="Start time" />
-            <span class="time-sep">→</span>
-            <input id="endTimeFilter" type="datetime-local" aria-label="End time" />
-          </div>
-        </div>
+    <div class="filter-group filter-group-time">
+      <span class="filter-label">Time range</span>
+      <div class="time-range">
+        <input id="startTimeFilter" type="datetime-local" aria-label="Start time" />
+        <span class="time-sep">→</span>
+        <input id="endTimeFilter" type="datetime-local" aria-label="End time" />
+      </div>
+    </div>
+  </div>
 
-        <div class="filter-actions">
-          <button id="applyFilters">Apply</button>
-          <button id="clearFilters" class="ghost">Clear</button>
-        </div>
-      </section>
+  <div class="filters-divider"></div>
+
+  <div class="filters-actions-row">
+    <button id="applyFilters">Apply</button>
+    <button id="clearFilters" class="ghost">Clear</button>
+  </div>
+</section>
 
       <section class="log-feed-wrap">
         <div class="log-feed-header">

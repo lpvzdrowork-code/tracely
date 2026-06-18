@@ -310,20 +310,34 @@ button, input, select {
 
 .filters {
   display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 20px;
+  flex-direction: column;
+  gap: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 18px;
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.filters-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-group-time {
+    min-width: 0;
+  }
+
+  #gameIdFilter {
+    width: 100%;
+  }
+
+  .filters-actions-row {
+    justify-content: stretch;
+  }
+
+  .filters-actions-row button {
+    flex: 1;
+  }
 
 .filter-label {
   font-size: 11px;
@@ -416,15 +430,26 @@ button, input, select {
   gap: 8px;
 }
 
+.time-range input[type="datetime-local"] {
+  flex: 1;
+  min-width: 0;
+}
+
 .time-sep {
   color: var(--text-secondary);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
-.filter-actions {
+.filters-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.filters-actions-row {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  margin-left: auto;
 }
 
 .filters button {
