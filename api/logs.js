@@ -9,7 +9,12 @@ export default async function handler(req, res) {
     return res.status(401).end();
   }
 
-  const { level, gameId, page, limit } = req.query;
-  const data = await getLogs({ level, gameId, page, limit });
+  const { level, gameId, page, limit, startTime, endTime } = req.query;
+
+  const levels = typeof level === 'string' && level.length
+    ? level.split(',').map((l) => l.trim()).filter(Boolean)
+    : [];
+
+  const data = await getLogs({ level: levels, gameId, startTime, endTime, page, limit });
   return res.status(200).json(data);
 }

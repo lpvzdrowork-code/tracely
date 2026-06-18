@@ -21,14 +21,16 @@ const statInfoEl = document.getElementById('statInfo');
 const statWarnEl = document.getElementById('statWarn');
 const statErrorEl = document.getElementById('statError');
 
-const levelFilterEl = document.getElementById('levelFilter');
+const levelCheckboxes = document.querySelectorAll('.level-checkbox');
 const gameIdFilterEl = document.getElementById('gameIdFilter');
+const startTimeFilterEl = document.getElementById('startTimeFilter');
+const endTimeFilterEl = document.getElementById('endTimeFilter');
 const applyFiltersBtn = document.getElementById('applyFilters');
 const clearFiltersBtn = document.getElementById('clearFilters');
 
 let chart = null;
 let refreshTimer = null;
-let activeFilters = { level: '', gameId: '' };
+let activeFilters = { levels: [], gameId: '', startTime: '', endTime: '' };
 
 function authHeaders() {
   const key = sessionStorage.getItem(STORAGE_KEY);
@@ -113,8 +115,10 @@ async function refresh() {
 
 function buildLogsUrl() {
   const params = new URLSearchParams();
-  if (activeFilters.level) params.set('level', activeFilters.level);
+  if (activeFilters.levels.length) params.set('level', activeFilters.levels.join(','));
   if (activeFilters.gameId) params.set('gameId', activeFilters.gameId);
+  if (activeFilters.startTime) params.set('startTime', activeFilters.startTime);
+  if (activeFilters.endTime) params.set('endTime', activeFilters.endTime);
   params.set('limit', '100');
   return `/api/logs?${params.toString()}`;
 }
@@ -236,7 +240,6 @@ function renderLogs(logs, total) {
   const newIds = new Set(logsById.keys());
   const isFirstLoad = knownLogIds.size === 0;
 
-  // Remove rows that are no longer in the list; refresh time/count on rows that are
   const existingRows = [...logFeedEl.querySelectorAll('.log-row')];
   existingRows.forEach(row => {
     const id = Number(row.dataset.id);
@@ -247,7 +250,6 @@ function renderLogs(logs, total) {
     }
   });
 
-  // Prepend new rows
   for (const log of [...logs].reverse()) {
     if (!knownLogIds.has(log.id)) {
       const row = buildLogRow(log, !isFirstLoad);
@@ -316,22 +318,32 @@ function buildLogRow(log, animate = false) {
   return row;
 }
 
+function toUnixSeconds(datetimeLocalValue) {
+  if (!datetimeLocalValue) return '';
+  const ms = new Date(datetimeLocalValue).getTime();
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : '';
+}
+
 applyFiltersBtn.addEventListener('click', () => {
+  const checkedLevels = [...levelCheckboxes].filter((cb) => cb.checked).map((cb) => cb.value);
   activeFilters = {
-    level: levelFilterEl.value,
+    levels: checkedLevels,
     gameId: gameIdFilterEl.value.trim(),
+    startTime: toUnixSeconds(startTimeFilterEl.value),
+    endTime: toUnixSeconds(endTimeFilterEl.value),
   };
   refresh();
 });
 
 clearFiltersBtn.addEventListener('click', () => {
-  levelFilterEl.value = '';
+  levelCheckboxes.forEach((cb) => (cb.checked = false));
   gameIdFilterEl.value = '';
-  activeFilters = { level: '', gameId: '' };
+  startTimeFilterEl.value = '';
+  endTimeFilterEl.value = '';
+  activeFilters = { levels: [], gameId: '', startTime: '', endTime: '' };
   refresh();
 });
 
-// Boot: if a key is already stored, validate it silently before showing the app.
 (async function init() {
   const storedKey = sessionStorage.getItem(STORAGE_KEY);
   if (!storedKey) return;

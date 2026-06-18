@@ -605,4 +605,33 @@ button, input, select {
   .main {
     padding: 20px 16px 40px;
   }
+
+  .level-checkboxes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+}
+
+.level-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.level-check input {
+  accent-color: var(--info);
+  cursor: pointer;
+}
+
+.filters input[type="datetime-local"] {
+  flex: none;
+  min-width: 0;
+  color-scheme: dark;
+}
+
 }
