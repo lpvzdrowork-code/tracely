@@ -101,12 +101,11 @@ async function refresh() {
     const logsData = await logsRes.json();
 
     renderStats(stats);
-    renderChart(stats.hourly);
+    renderChart(stats.hourly ?? []);
     renderLogs(logsData.logs);
 
     lastUpdatedEl.textContent = `updated ${new Date().toLocaleTimeString()}`;
   } catch (err) {
-    console.error('refresh error:', err);
     lastUpdatedEl.textContent = 'connection lost — retrying…';
   }
 }
@@ -120,9 +119,10 @@ function buildLogsUrl() {
 }
 
 function renderStats(stats) {
-  statInfoEl.textContent = (stats.counts.INFO ?? 0).toLocaleString();
-  statWarnEl.textContent = (stats.counts.WARN ?? 0).toLocaleString();
-  statErrorEl.textContent = (stats.counts.ERROR ?? 0).toLocaleString();
+  const counts = stats.counts ?? stats;
+  statInfoEl.textContent = (counts.INFO ?? 0).toLocaleString();
+  statWarnEl.textContent = (counts.WARN ?? 0).toLocaleString();
+  statErrorEl.textContent = (counts.ERROR ?? 0).toLocaleString();
 }
 
 function renderChart(hourly) {
