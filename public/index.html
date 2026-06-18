@@ -37,83 +37,89 @@
     </header>
 
     <main class="main">
-      <section class="stats">
-        <div class="stat-card stat-info">
-          <span class="stat-label">Info</span>
-          <span class="stat-value" id="statInfo">0</span>
-        </div>
-        <div class="stat-card stat-warn">
-          <span class="stat-label">Warn</span>
-          <span class="stat-value" id="statWarn">0</span>
-        </div>
-        <div class="stat-card stat-error">
-          <span class="stat-label">Error</span>
-          <span class="stat-value" id="statError">0</span>
-        </div>
-      </section>
+      <div class="layout">
+        <div class="sidebar-col">
+          <aside class="sidebar">
+            <h2 class="section-title">Filters</h2>
 
-      <section class="chart-section">
-        <h2 class="section-title">Activity — last 24 hours</h2>
-        <div class="chart-wrap">
-          <canvas id="activityChart"></canvas>
-        </div>
-      </section>
+            <div class="filter-group">
+              <span class="filter-label">Level</span>
+              <div class="level-chips">
+                <label class="level-chip" data-level="INFO">
+                  <input type="checkbox" class="level-checkbox" value="INFO" />
+                  <span>Info</span>
+                </label>
+                <label class="level-chip" data-level="WARN">
+                  <input type="checkbox" class="level-checkbox" value="WARN" />
+                  <span>Warn</span>
+                </label>
+                <label class="level-chip" data-level="ERROR">
+                  <input type="checkbox" class="level-checkbox" value="ERROR" />
+                  <span>Error</span>
+                </label>
+              </div>
+            </div>
 
-      <section class="filters">
-  <div class="filters-row">
-    <div class="filter-group">
-      <span class="filter-label">Level</span>
-      <div class="level-chips">
-        <label class="level-chip" data-level="INFO">
-          <input type="checkbox" class="level-checkbox" value="INFO" />
-          <span>Info</span>
-        </label>
-        <label class="level-chip" data-level="WARN">
-          <input type="checkbox" class="level-checkbox" value="WARN" />
-          <span>Warn</span>
-        </label>
-        <label class="level-chip" data-level="ERROR">
-          <input type="checkbox" class="level-checkbox" value="ERROR" />
-          <span>Error</span>
-        </label>
+            <div class="filter-group">
+              <span class="filter-label">Game ID</span>
+              <input id="gameIdFilter" type="text" placeholder="Any game…" inputmode="numeric" />
+            </div>
+
+            <div class="filter-group">
+              <span class="filter-label">Time range</span>
+              <div class="time-range">
+                <input id="startTimeFilter" type="datetime-local" aria-label="Start time" />
+                <span class="time-sep">to</span>
+                <input id="endTimeFilter" type="datetime-local" aria-label="End time" />
+              </div>
+            </div>
+
+            <div class="filters-divider"></div>
+
+            <div class="filters-actions-row">
+              <button id="applyFilters">Apply</button>
+              <button id="clearFilters" class="ghost">Clear</button>
+            </div>
+          </aside>
+        </div>
+
+        <div class="content">
+          <section class="stats">
+            <div class="stat-card stat-info">
+              <span class="stat-label">Info</span>
+              <span class="stat-value" id="statInfo">0</span>
+            </div>
+            <div class="stat-card stat-warn">
+              <span class="stat-label">Warn</span>
+              <span class="stat-value" id="statWarn">0</span>
+            </div>
+            <div class="stat-card stat-error">
+              <span class="stat-label">Error</span>
+              <span class="stat-value" id="statError">0</span>
+            </div>
+          </section>
+
+          <section class="chart-section">
+            <h2 class="section-title">Activity — last 24 hours</h2>
+            <div class="chart-wrap">
+              <canvas id="activityChart"></canvas>
+            </div>
+          </section>
+
+          <section class="log-feed-wrap">
+            <div class="log-feed-header">
+              <span>Time</span>
+              <span>Game ID</span>
+              <span>Level</span>
+              <span>Message</span>
+              <span class="log-feed-total" id="logTotal"></span>
+            </div>
+            <div class="log-feed" id="logFeed">
+              <p class="empty-state" id="emptyState" hidden>No logs match these filters yet.</p>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
-
-    <div class="filter-group">
-      <span class="filter-label">Game ID</span>
-      <input id="gameIdFilter" type="text" placeholder="Any game…" inputmode="numeric" />
-    </div>
-
-    <div class="filter-group filter-group-time">
-      <span class="filter-label">Time range</span>
-      <div class="time-range">
-        <input id="startTimeFilter" type="datetime-local" aria-label="Start time" />
-        <span class="time-sep">→</span>
-        <input id="endTimeFilter" type="datetime-local" aria-label="End time" />
-      </div>
-    </div>
-  </div>
-
-  <div class="filters-divider"></div>
-
-  <div class="filters-actions-row">
-    <button id="applyFilters">Apply</button>
-    <button id="clearFilters" class="ghost">Clear</button>
-  </div>
-</section>
-
-      <section class="log-feed-wrap">
-        <div class="log-feed-header">
-          <span>Time</span>
-          <span>Game ID</span>
-          <span>Level</span>
-          <span>Message</span>
-          <span class="log-feed-total" id="logTotal"></span>
-        </div>
-        <div class="log-feed" id="logFeed">
-          <p class="empty-state" id="emptyState" hidden>No logs match these filters yet.</p>
-        </div>
-      </section>
     </main>
   </div>
 
