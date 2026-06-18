@@ -1,4 +1,4 @@
-import { getLogs } from '../lib/db.js';
+import { getStats } from '../lib/db.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -10,7 +10,6 @@ export default async function handler(req, res) {
   }
 
   res.setHeader('Cache-Control', 'no-store');
-  const { level, gameId, page, limit } = req.query;
-  const data = await getLogs({ level, gameId, page, limit });
+  const data = await getStats();
   return res.status(200).json(data);
 }
