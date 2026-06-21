@@ -274,6 +274,13 @@ function enterDashboard(workspace) {
 // Populates the "send your first log" snippet in the empty-state with the
 // current workspace's host + key hint. Pulled out of enterDashboard so
 // switchWorkspace() can refresh it too when the active workspace changes.
+//
+// `lines` is the single source of truth for both the on-screen HTML (which
+// needs <br>/&nbsp; since <code> collapses whitespace) and the plain-text
+// version kept for the copy button — building both from one array means
+// they can't quietly drift apart the way two hand-written strings could.
+let onboardSnippetPlainText = '';
+
 function updateOnboardingSnippet() {
   const snippetEl = document.getElementById('onboardSnippet');
   if (!snippetEl) return;
@@ -281,14 +288,39 @@ function updateOnboardingSnippet() {
   const key  = currentWorkspace?.apiKeyLast4
     ? `tracely_live_…${currentWorkspace.apiKeyLast4}`
     : 'tracely_live_…';
-  snippetEl.innerHTML =
-    `HttpService:PostAsync("https://${host}/api/log", HttpService:JSONEncode({<br>` +
-    `&nbsp;&nbsp;tracelyKey = "${key}",<br>` +
-    `&nbsp;&nbsp;level = "INFO",<br>` +
-    `&nbsp;&nbsp;message = "Hello from Roblox",<br>` +
-    `&nbsp;&nbsp;timestamp = os.time(),<br>` +
-    `&nbsp;&nbsp;gameId = game.GameId<br>` +
-    `}))`;
+
+  const lines = [
+    `HttpService:PostAsync("https://${host}/api/log", HttpService:JSONEncode({`,
+    `  tracelyKey = "${key}",`,
+    `  level = "INFO",`,
+    `  message = "Hello from Roblox",`,
+    `  timestamp = os.time(),`,
+    `  gameId = game.GameId`,
+    `}))`,
+  ];
+
+  onboardSnippetPlainText = lines.join('\n');
+  snippetEl.innerHTML = lines
+    .map((line) => line.replace(/^( +)/, (spaces) => '&nbsp;'.repeat(spaces.length)))
+    .join('<br>');
+}
+
+const onboardSnippetCopyBtn = document.getElementById('onboardSnippetCopyBtn');
+if (onboardSnippetCopyBtn) {
+  onboardSnippetCopyBtn.addEventListener('click', async () => {
+    try {
+      // Copies the masked key as-is — there's no way around that, the raw
+      // key only ever exists in memory at creation time. The note under
+      // the snippet tells people to swap it for their real key before
+      // running this in Roblox.
+      await navigator.clipboard.writeText(onboardSnippetPlainText);
+      const original = onboardSnippetCopyBtn.textContent;
+      onboardSnippetCopyBtn.textContent = 'Copied';
+      setTimeout(() => { onboardSnippetCopyBtn.textContent = original; }, 1500);
+    } catch {
+      /* Clipboard API unavailable — snippet is still visible/selectable. */
+    }
+  });
 }
 
 function unlockApp() {

@@ -275,9 +275,24 @@
                   <p class="empty-onboard-title">No logs yet</p>
                   <p class="empty-onboard-desc">Send your first log from Roblox using your workspace API key.</p>
                   <div class="empty-onboard-snippet">
+                    <div class="empty-onboard-snippet-header">
+                      <span class="empty-onboard-snippet-label">ServerScriptService</span>
+                      <button type="button" id="onboardSnippetCopyBtn" class="btn-ghost btn-sm">Copy</button>
+                    </div>
                     <code id="onboardSnippet"></code>
                   </div>
+                  <p class="empty-onboard-snippet-note">Key is shown partially redacted above for security — swap in your full <code>tracely_live_…</code> key from Settings before running this.</p>
                   <button class="btn-ghost btn-sm" onclick="document.querySelector('[data-view=settings]').click()">View API key in Settings →</button>
+
+                  <details class="empty-onboard-help">
+                    <summary>Need help? View integration guide</summary>
+                    <ol class="empty-onboard-help-steps">
+                      <li>Add a <code>Script</code> inside <code>ServerScriptService</code> — not a LocalScript. Your API key has to stay server-side.</li>
+                      <li>Paste the snippet above into it, then replace the masked key with your full key from Settings → Workspaces.</li>
+                      <li>Wrap the <code>PostAsync</code> call in a <code>pcall</code> so a dropped request doesn't error your game.</li>
+                      <li>Press Play in Studio — your first log should show up here within a few seconds.</li>
+                    </ol>
+                  </details>
                 </div>
               </div>
             </div>

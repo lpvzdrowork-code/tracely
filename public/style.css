@@ -1398,6 +1398,70 @@ html.theme-light .segmented-btn.active {
   line-height: 1.7;
 }
 
+.empty-onboard-snippet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.empty-onboard-snippet-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.empty-onboard-snippet-note {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: -2px 0 0;
+  max-width: 480px;
+}
+.empty-onboard-snippet-note code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.empty-onboard-help {
+  width: 100%;
+  max-width: 480px;
+  text-align: left;
+  margin-top: 4px;
+}
+.empty-onboard-help summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  list-style: none;
+}
+.empty-onboard-help summary::-webkit-details-marker { display: none; }
+.empty-onboard-help summary::before { content: '→  '; }
+.empty-onboard-help[open] summary::before { content: '↓  '; }
+.empty-onboard-help summary:hover { color: var(--text-secondary); }
+.empty-onboard-help-steps {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.empty-onboard-help-steps code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+
 /* ── Ingestion pulse ── */
 .ingest-pulse {
   display: inline-block;
