@@ -29,6 +29,9 @@ const apiKeyContinueBtn = document.getElementById('apiKeyContinueBtn');
 const appEl       = document.getElementById('app');
 const lastUpdated = document.getElementById('lastUpdated');
 
+// ── Ingestion pulse ──
+const ingestPulseEl = document.getElementById('ingestPulse');
+
 // ── Stats ──
 const statInfoEl  = document.getElementById('statInfo');
 const statWarnEl  = document.getElementById('statWarn');
@@ -240,6 +243,23 @@ function enterDashboard(workspace) {
   apiKeyReveal.hidden = true;
   unlockApp();
   if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
+
+  // Populate the onboarding snippet with real host + key hint
+  const snippetEl = document.getElementById('onboardSnippet');
+  if (snippetEl) {
+    const host = window.location.host;
+    const key  = currentWorkspace?.apiKeyLast4
+      ? `tracely_live_…${currentWorkspace.apiKeyLast4}`
+      : 'tracely_live_…';
+    snippetEl.innerHTML =
+      `HttpService:PostAsync("https://${host}/api/log", HttpService:JSONEncode({<br>` +
+      `&nbsp;&nbsp;tracelyKey = "${key}",<br>` +
+      `&nbsp;&nbsp;level = "INFO",<br>` +
+      `&nbsp;&nbsp;message = "Hello from Roblox",<br>` +
+      `&nbsp;&nbsp;timestamp = os.time(),<br>` +
+      `&nbsp;&nbsp;gameId = game.GameId<br>` +
+      `}))`;
+  }
 }
 
 function unlockApp() {
@@ -328,6 +348,15 @@ function applyStreamUI() {
   if (navLiveDot)   navLiveDot.classList.toggle('dot-paused', isPaused);
 }
 
+function triggerIngestPulse() {
+  if (!ingestPulseEl) return;
+  ingestPulseEl.hidden = false;
+  ingestPulseEl.classList.remove('pulse-flash');
+  // Force reflow so re-adding the class restarts the animation
+  void ingestPulseEl.offsetWidth;
+  ingestPulseEl.classList.add('pulse-flash');
+}
+
 function setPaused(paused) {
   isPaused = paused;
   applyStreamUI();
@@ -359,9 +388,13 @@ async function refresh() {
     const stats    = await statsRes.json();
     const logsData = await logsRes.json();
 
+    const prevSize = knownLogIds.size;
     renderStats(stats);
     renderChart(stats.hourly ?? []);
     renderLogs(logsData.logs, logsData.total);
+
+    // Flash the ingestion pulse whenever new log rows arrive
+    if (!isPaused && knownLogIds.size > prevSize) triggerIngestPulse();
 
     lastUpdated.textContent = `updated ${new Date().toLocaleTimeString()}`;
 
@@ -1082,8 +1115,82 @@ function buildPermalinkUrl(log) {
   return url.toString();
 }
 
+// ─────────────────────────────────────────
+// TIMESTAMP FORMATTING
+// UTC vs Local toggle — persisted in localStorage
+// ─────────────────────────────────────────
+const TZ_KEY = 'tracelyTzMode'; // 'local' | 'utc'
+let tzMode = localStorage.getItem(TZ_KEY) || 'local';
+
+function setTzMode(mode) {
+  tzMode = mode;
+  localStorage.setItem(TZ_KEY, mode);
+  // Update toggle button state
+  const tzBtns = document.querySelectorAll('.tz-btn');
+  tzBtns.forEach((b) => b.classList.toggle('active', b.dataset.tz === mode));
+  // Re-render all visible timestamps without a full refresh
+  document.querySelectorAll('.log-row').forEach((row) => {
+    const id  = Number(row.dataset.id);
+    const log = logDataById.get(id);
+    if (!log) return;
+    const timeEl = row.querySelector('.log-time');
+    if (timeEl) timeEl.textContent = formatTime(log.timestamp);
+  });
+  // Re-render drawer if open
+  if (selectedLogId !== null) {
+    const log = logDataById.get(selectedLogId);
+    if (log) {
+      const tsField = document.querySelector('.detail-field [data-field="timestamp"]');
+      if (tsField) tsField.textContent = formatFullTime(log.timestamp);
+      const utcField = document.querySelector('.detail-field [data-field="utc"]');
+      if (utcField) utcField.textContent = formatUtcFull(log.timestamp);
+    }
+  }
+}
+
+/**
+ * Short timestamp for the log feed column.
+ * Shows time only if the log is from today (local or UTC depending on mode),
+ * otherwise prepends the date so yesterday's logs aren't ambiguous.
+ */
 function formatTime(ts) {
-  return new Date(ts * 1000).toLocaleTimeString();
+  const d    = new Date(ts * 1000);
+  const now  = new Date();
+  const opts = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+
+  if (tzMode === 'utc') {
+    const sameDay =
+      d.getUTCFullYear() === now.getUTCFullYear() &&
+      d.getUTCMonth()    === now.getUTCMonth() &&
+      d.getUTCDate()     === now.getUTCDate();
+    const time = d.toLocaleTimeString([], { ...opts, timeZone: 'UTC' });
+    return sameDay ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' })} ${time}`;
+  }
+
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth()    === now.getMonth() &&
+    d.getDate()     === now.getDate();
+  const time = d.toLocaleTimeString([], opts);
+  return sameDay ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+}
+
+/** Full timestamp for the detail drawer — always shows both local and UTC. */
+function formatFullTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+}
+
+function formatUtcFull(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'UTC', timeZoneName: 'short',
+  });
 }
 
 // ─────────────────────────────────────────
@@ -1107,7 +1214,12 @@ function openDrawer(log) {
   levelBadge.textContent = log.level;
   sec1.appendChild(levelBadge);
 
-  sec1.appendChild(makeDetailField('Timestamp', new Date(log.timestamp * 1000).toLocaleString()));
+  const tsWrap = makeDetailField('Local time', formatFullTime(log.timestamp));
+  tsWrap.querySelector('.detail-field-val').dataset.field = 'timestamp';
+  sec1.appendChild(tsWrap);
+  const utcWrap = makeDetailField('UTC', formatUtcFull(log.timestamp));
+  utcWrap.querySelector('.detail-field-val').dataset.field = 'utc';
+  sec1.appendChild(utcWrap);
   sec1.appendChild(makeDetailField('Game ID',   String(log.gameId)));
   sec1.appendChild(makeDetailField('Log ID',    String(log.id)));
   if (log.count > 1) {
@@ -1369,6 +1481,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     const log = logDataById.get(kbFocusedId);
     if (log) openDrawer(log);
+  } else if (e.key === '?') {
+    e.preventDefault();
+    openShortcutsModal();
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    setPaused(!isPaused);
   }
 });
 
@@ -1803,7 +1921,34 @@ if (nukeConfirmBtn) {
   });
 }
 
+// ─────────────────────────────────────────
+// KEYBOARD SHORTCUTS MODAL
+// ─────────────────────────────────────────
+const shortcutsModal = document.getElementById('shortcutsModal');
+const shortcutsBtn   = document.getElementById('shortcutsBtn');
+const shortcutsClose = document.getElementById('shortcutsClose');
+
+function openShortcutsModal() {
+  if (shortcutsModal) shortcutsModal.hidden = false;
+}
+
+function closeShortcutsModal() {
+  if (shortcutsModal) shortcutsModal.hidden = true;
+}
+
+if (shortcutsBtn)   shortcutsBtn.addEventListener('click', openShortcutsModal);
+if (shortcutsClose) shortcutsClose.addEventListener('click', closeShortcutsModal);
+if (shortcutsModal) {
+  shortcutsModal.addEventListener('click', (e) => {
+    if (e.target === shortcutsModal) closeShortcutsModal();
+  });
+}
+
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && shortcutsModal && !shortcutsModal.hidden) {
+    closeShortcutsModal();
+    return;
+  }
   if (e.key === 'Escape' && nukeModalOverlay && !nukeModalOverlay.hidden) closeNukeModal();
 });
 
@@ -1816,6 +1961,12 @@ document.addEventListener('keydown', (e) => {
   renderRedactionTags();
   applyStreamUI();
   setAuthMode('login');
+
+  // Wire UTC/Local toggle buttons (rendered in the topbar by index.html)
+  document.querySelectorAll('.tz-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tz === tzMode);
+    btn.addEventListener('click', () => setTzMode(btn.dataset.tz));
+  });
 
   const workspace = await checkExistingSession();
   if (workspace) {

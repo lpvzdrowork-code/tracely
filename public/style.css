@@ -660,23 +660,37 @@ button, input, select, textarea { font-family: inherit; }
 .log-row:hover       { background: rgba(255,255,255,0.03); }
 .log-row.selected    { background: rgba(59,130,246,0.06); border-left-color: var(--info) !important; }
 
-.log-row[data-level="INFO"]  { border-left-color: var(--info); }
-.log-row[data-level="WARN"]  { border-left-color: var(--warn); }
-.log-row[data-level="ERROR"] { border-left-color: var(--error); }
+.log-row[data-level="ERROR"] {
+  border-left: 2px solid rgba(239, 68, 68, 0.35);
+}
+.log-row[data-level="WARN"] {
+  border-left: 2px solid rgba(245, 158, 11, 0.25);
+}
+.log-row[data-level="INFO"] {
+  border-left: 2px solid transparent;
+}
+ 
 
 .log-time  { color: var(--text-secondary); white-space: nowrap; }
 .log-game  { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .log-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  border-radius: 999px; padding: 2px 8px 2px 6px;
-  font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
-  height: fit-content; width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
 }
-.log-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; }
-.log-badge.INFO  { background: rgba(59,130,246,0.12);  color: var(--info);  }
-.log-badge.WARN  { background: rgba(245,158,11,0.12);  color: var(--warn);  }
-.log-badge.ERROR { background: rgba(239,68,68,0.12);   color: var(--error); }
+ 
+.log-badge.INFO  { color: var(--info);  background: rgba(59,  130, 246, 0.12); }
+.log-badge.WARN  { color: var(--warn);  background: rgba(245, 158,  11, 0.12); }
+.log-badge.ERROR { color: var(--error); background: rgba(239,  68,  68, 0.12); }
 .log-badge.INFO::before  { background: var(--info); }
 .log-badge.WARN::before  { background: var(--warn); }
 .log-badge.ERROR::before { background: var(--error); }
@@ -948,14 +962,21 @@ button, input, select, textarea { font-family: inherit; }
   word-break: break-all;
 }
 .detail-level-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  border-radius: 999px; padding: 3px 10px 3px 8px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 10px;
 }
-.detail-level-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
-.detail-level-badge.INFO  { background: rgba(59,130,246,0.12);  color: var(--info);  }
-.detail-level-badge.WARN  { background: rgba(245,158,11,0.12);  color: var(--warn);  }
-.detail-level-badge.ERROR { background: rgba(239,68,68,0.12);   color: var(--error); }
+ 
+.detail-level-badge.INFO  { color: var(--info);  background: rgba(59,  130, 246, 0.15); }
+.detail-level-badge.WARN  { color: var(--warn);  background: rgba(245, 158,  11, 0.15); }
+.detail-level-badge.ERROR { color: var(--error); background: rgba(239,  68,  68, 0.15); }
 .detail-level-badge.INFO::before  { background: var(--info); }
 .detail-level-badge.WARN::before  { background: var(--warn); }
 .detail-level-badge.ERROR::before { background: var(--error); }
@@ -1188,4 +1209,167 @@ html.theme-light .segmented-btn.active {
     flex-direction: column; align-items: flex-start; gap: 10px;
   }
   .settings-card { margin-left: 12px; margin-right: 12px; }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-state-msg {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.empty-state-onboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.empty-onboard-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.empty-onboard-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.empty-onboard-snippet {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: left;
+  margin-bottom: 8px;
+}
+
+.empty-onboard-snippet code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* ── Ingestion pulse ── */
+.ingest-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--info);
+  margin-right: 6px;
+  opacity: 0;
+  flex-shrink: 0;
+  align-self: center;
+}
+ 
+.ingest-pulse.pulse-flash {
+  animation: ingest-pulse-anim 1.2s ease-out forwards;
+}
+ 
+@keyframes ingest-pulse-anim {
+  0%   { opacity: 1; transform: scale(1.4); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+  40%  { opacity: 1; transform: scale(1);   box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
+  100% { opacity: 0; transform: scale(1);   box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
+}
+ 
+/* ── Shortcuts button in topbar ── */
+.shortcuts-btn {
+  margin-left: 6px;
+  color: var(--text-secondary);
+}
+ 
+.shortcuts-btn:hover {
+  color: var(--text-primary);
+}
+ 
+/* ── Shortcuts modal ── */
+.shortcuts-modal-box {
+  max-width: 420px;
+  width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+ 
+.shortcuts-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+ 
+.shortcuts-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+ 
+.shortcuts-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+ 
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+ 
+.shortcut-row span {
+  color: var(--text-secondary);
+}
+ 
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+ 
+kbd.kbd-wide {
+  min-width: 90px;
+  justify-content: flex-start;
+  font-size: 11px;
+}
+
+/* ── UTC / Local toggle ── */
+.tz-toggle {
+  /* Slightly smaller than the settings segmented controls */
+  font-size: 11px;
+}
+ 
+.tz-toggle .segmented-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  height: 24px;
 }

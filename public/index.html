@@ -148,7 +148,17 @@
             </button>
           </div>
           <div class="feed-topbar-right">
+            <span class="ingest-pulse" id="ingestPulse" aria-hidden="true" hidden></span>
             <span class="feed-updated" id="lastUpdated">waiting…</span>
+            <div class="segmented tz-toggle" role="group" aria-label="Timestamp timezone">
+              <button type="button" class="segmented-btn tz-btn" data-tz="local">Local</button>
+              <button type="button" class="segmented-btn tz-btn" data-tz="utc">UTC</button>
+            </div>
+            <button type="button" class="btn-ghost btn-sm btn-icon shortcuts-btn" id="shortcutsBtn" title="Keyboard shortcuts (?)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -241,7 +251,20 @@
               <span class="log-feed-total" id="logTotal"></span>
             </div>
             <div class="log-feed" id="logFeed">
-              <p class="empty-state" id="emptyState" hidden>No logs match these filters yet.</p>
+              <div class="empty-state" id="emptyState" hidden>
+                <p class="empty-state-msg" id="emptyStateMsg">No logs match these filters yet.</p>
+                <div class="empty-state-onboard" id="emptyStateOnboard" hidden>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary);margin-bottom:12px">
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                  </svg>
+                  <p class="empty-onboard-title">No logs yet</p>
+                  <p class="empty-onboard-desc">Send your first log from Roblox using your workspace API key.</p>
+                  <div class="empty-onboard-snippet">
+                    <code id="onboardSnippet"></code>
+                  </div>
+                  <button class="btn-ghost btn-sm" onclick="document.querySelector('[data-view=settings]').click()">View API key in Settings →</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -395,6 +418,49 @@
 
     </div><!-- /workspace -->
   </div><!-- /app -->
+
+  <!-- Keyboard shortcuts modal -->
+  <div class="modal-overlay" id="shortcutsModal" hidden>
+    <div class="modal-box shortcuts-modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcutsModalTitle">
+      <div class="shortcuts-modal-header">
+        <h3 class="modal-title" id="shortcutsModalTitle">Keyboard Shortcuts</h3>
+        <button class="detail-close" id="shortcutsClose" aria-label="Close shortcuts">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="shortcuts-group">
+        <p class="shortcuts-group-title">Navigation</p>
+        <div class="shortcut-row"><kbd>j</kbd><span>Next log</span></div>
+        <div class="shortcut-row"><kbd>k</kbd><span>Previous log</span></div>
+        <div class="shortcut-row"><kbd>Enter</kbd><span>Open selected log in drawer</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd><span>Close drawer / modal</span></div>
+      </div>
+
+      <div class="shortcuts-group">
+        <p class="shortcuts-group-title">Search</p>
+        <div class="shortcut-row"><kbd>/</kbd><span>Focus search bar</span></div>
+        <div class="shortcut-row"><kbd>Tab</kbd><span>Accept autocomplete suggestion</span></div>
+      </div>
+
+      <div class="shortcuts-group">
+        <p class="shortcuts-group-title">Query syntax</p>
+        <div class="shortcut-row"><kbd class="kbd-wide">level:error</kbd><span>Filter by level (info / warn / error)</span></div>
+        <div class="shortcut-row"><kbd class="kbd-wide">game:123</kbd><span>Filter by game ID</span></div>
+        <div class="shortcut-row"><kbd class="kbd-wide">after:1h</kbd><span>Logs from last N minutes / hours / days</span></div>
+        <div class="shortcut-row"><kbd class="kbd-wide">before:2d</kbd><span>Logs before relative time</span></div>
+        <div class="shortcut-row"><kbd class="kbd-wide">id:4821</kbd><span>Jump to specific log ID</span></div>
+      </div>
+
+      <div class="shortcuts-group">
+        <p class="shortcuts-group-title">General</p>
+        <div class="shortcut-row"><kbd>?</kbd><span>Open this cheat sheet</span></div>
+        <div class="shortcut-row"><kbd>Space</kbd><span>Pause / resume live feed</span></div>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="/app.js"></script>
