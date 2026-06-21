@@ -122,7 +122,6 @@ navItems.forEach((btn) => {
     const target = document.getElementById(`view-${view}`);
     if (target) target.hidden = false;
 
-    // Re-render chart when switching to metrics (canvas needs visible parent)
     if (view === 'metrics' && chart) chart.update();
   });
 });
@@ -167,7 +166,7 @@ async function refresh() {
 }
 
 // ─────────────────────────────────────────
-// URL builder (includes client-side search)
+// URL builder
 // ─────────────────────────────────────────
 function buildLogsUrl() {
   const params = new URLSearchParams();
@@ -175,7 +174,6 @@ function buildLogsUrl() {
   if (activeFilters.gameId)        params.set('gameId',     activeFilters.gameId);
   if (activeFilters.startTime)     params.set('startTime',  activeFilters.startTime);
   if (activeFilters.endTime)       params.set('endTime',    activeFilters.endTime);
-  // Fetch more rows when searching so we can filter client-side for instant feel
   params.set('limit', activeFilters.search ? '200' : '100');
   return `/api/logs?${params.toString()}`;
 }
@@ -194,7 +192,7 @@ function renderStats(stats) {
 // Chart
 // ─────────────────────────────────────────
 function buildHourBuckets() {
-  const now             = Math.floor(Date.now() / 1000);
+  const now              = Math.floor(Date.now() / 1000);
   const currentHourStart = Math.floor(now / 3600) * 3600;
   const buckets = [];
   for (let i = 23; i >= 0; i--) buckets.push(currentHourStart - i * 3600);
@@ -258,25 +256,389 @@ function renderChart(hourly) {
 }
 
 // ─────────────────────────────────────────
-// Log feed
+// ── SMART QUERY PARSER ──
+//
+// Supported tokens (all case-insensitive):
+//   level:<value>          INFO, WARN, ERROR — comma-separated ok
+//   level:<a>,<b>          e.g. level:warn,error
+//   game:<id>              numeric game ID
+//   game_id:<id>           alias for game:
+//   id:<n>                 filter to a specific log ID (client-side)
+//   after:<time>           ISO date, or relative: 1h 30m 2d 1w
+//   before:<time>          same formats
+//   <bare text>            message substring search
+//
+// Returns a ParsedQuery object consumed by applyParsedQuery().
 // ─────────────────────────────────────────
-function applySearchFilter(logs) {
-  const q = activeFilters.search.trim().toLowerCase();
-  if (!q) return logs;
-  return logs.filter((l) =>
-    l.message.toLowerCase().includes(q) ||
-    String(l.gameId).includes(q) ||
-    l.level.toLowerCase().includes(q)
+
+const VALID_LEVELS = new Set(['INFO', 'WARN', 'ERROR']);
+
+// Maps short aliases → canonical key
+const TOKEN_ALIASES = {
+  level:   'level',
+  lvl:     'level',
+  game:    'game',
+  game_id: 'game',
+  gameid:  'game',
+  after:   'after',
+  since:   'after',
+  from:    'after',
+  before:  'before',
+  until:   'before',
+  to:      'before',
+  id:      'id',
+};
+
+// All canonical keys we recognise, for autocomplete
+const KNOWN_KEYS = Object.keys(TOKEN_ALIASES);
+
+/**
+ * Parse a relative time string like "3h", "2d", "30m", "1w"
+ * into a Unix timestamp (seconds). Returns null if not a relative expr.
+ */
+function parseRelativeTime(val) {
+  const m = /^(\d+(?:\.\d+)?)\s*(m|min|h|hr|d|day|w|wk|week)s?$/i.exec(val.trim());
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  const unit = m[2].toLowerCase();
+  const multipliers = { m: 60, min: 60, h: 3600, hr: 3600, d: 86400, day: 86400, w: 604800, wk: 604800, week: 604800 };
+  return Math.floor(Date.now() / 1000) - n * multipliers[unit];
+}
+
+/**
+ * Parse an absolute or relative date/time string into Unix seconds.
+ * Returns { ts: number, error: string|null }
+ */
+function parseTimeValue(raw) {
+  const rel = parseRelativeTime(raw);
+  if (rel !== null) return { ts: rel, error: null };
+
+  // Try native Date parse (handles ISO, "Jan 15 2024", etc.)
+  const ms = Date.parse(raw);
+  if (!isNaN(ms)) return { ts: Math.floor(ms / 1000), error: null };
+
+  return { ts: null, error: `"${raw}" isn't a valid date or relative time (e.g. 3h, 2d, 2024-01-15)` };
+}
+
+/**
+ * Core parser. Returns:
+ * {
+ *   levels: string[],        // ['INFO','WARN'] etc., empty = all
+ *   gameId: string,          // '' = no filter
+ *   logId:  string,          // '' = no filter
+ *   startTime: string,       // unix seconds as string, or ''
+ *   endTime:   string,       // unix seconds as string, or ''
+ *   search: string,          // remaining free text
+ *   tokens: Token[],         // for pill rendering
+ * }
+ *
+ * Token: { key, rawKey, value, valid, error }
+ */
+function parseQuery(raw) {
+  const result = {
+    levels: [], gameId: '', logId: '', startTime: '', endTime: '', search: '',
+    tokens: [],
+  };
+
+  if (!raw || !raw.trim()) return result;
+
+  // Tokenise: match `key:value` pairs (value may be quoted) and bare words
+  // Pattern: (\w+):(\"[^\"]*\"|'[^']*'|\S+)  OR  \S+
+  const tokenRe = /(\w+):(\"[^\"]*\"|'[^']*'|\S+)|(\S+)/g;
+  const freeParts = [];
+  let match;
+
+  while ((match = tokenRe.exec(raw)) !== null) {
+    if (match[1]) {
+      // key:value token
+      const rawKey   = match[1].toLowerCase();
+      const rawValue = match[2].replace(/^['"]|['"]$/g, ''); // strip quotes
+      const canonical = TOKEN_ALIASES[rawKey];
+
+      if (!canonical) {
+        // Unknown key — treat the whole thing as free text
+        freeParts.push(match[0]);
+        continue;
+      }
+
+      const token = { key: canonical, rawKey, value: rawValue, valid: true, error: null };
+
+      if (canonical === 'level') {
+        const parts = rawValue.split(',').map((p) => p.trim().toUpperCase()).filter(Boolean);
+        const invalid = parts.filter((p) => !VALID_LEVELS.has(p));
+        if (invalid.length) {
+          token.valid = false;
+          token.error = `Unknown level(s): ${invalid.join(', ')}. Use INFO, WARN, or ERROR.`;
+        } else {
+          // Merge — later tokens add to existing set
+          const merged = new Set([...result.levels, ...parts]);
+          result.levels = [...merged];
+        }
+
+      } else if (canonical === 'game') {
+        const n = Number(rawValue);
+        if (!rawValue || isNaN(n) || !Number.isFinite(n)) {
+          token.valid = false;
+          token.error = `Game ID must be a number, got "${rawValue}".`;
+        } else {
+          result.gameId = String(Math.round(n));
+        }
+
+      } else if (canonical === 'id') {
+        const n = Number(rawValue);
+        if (!rawValue || isNaN(n) || !Number.isFinite(n)) {
+          token.valid = false;
+          token.error = `Log ID must be a number, got "${rawValue}".`;
+        } else {
+          result.logId = String(Math.round(n));
+        }
+
+      } else if (canonical === 'after') {
+        const { ts, error } = parseTimeValue(rawValue);
+        if (error) { token.valid = false; token.error = error; }
+        else { result.startTime = String(ts); }
+
+      } else if (canonical === 'before') {
+        const { ts, error } = parseTimeValue(rawValue);
+        if (error) { token.valid = false; token.error = error; }
+        else { result.endTime = String(ts); }
+      }
+
+      result.tokens.push(token);
+
+    } else {
+      // Bare word / free text
+      freeParts.push(match[3]);
+    }
+  }
+
+  result.search = freeParts.join(' ').trim();
+  return result;
+}
+
+// ─────────────────────────────────────────
+// Apply parsed query → activeFilters + UI sync
+// ─────────────────────────────────────────
+function applyParsedQuery(parsed) {
+  activeFilters = {
+    search:    parsed.search,
+    levels:    parsed.levels,
+    gameId:    parsed.gameId,
+    startTime: parsed.startTime,
+    endTime:   parsed.endTime,
+    logId:     parsed.logId ?? '',
+  };
+
+  // Sync the legacy checkbox UI so they stay consistent
+  levelCheckboxes.forEach((cb) => {
+    cb.checked = parsed.levels.includes(cb.value);
+  });
+  if (gameIdFilterEl) gameIdFilterEl.value = parsed.gameId;
+
+  // Sync datetime-local inputs (only if we have a numeric timestamp)
+  if (startTimeFilterEl && parsed.startTime) {
+    const d = new Date(Number(parsed.startTime) * 1000);
+    startTimeFilterEl.value = toDatetimeLocal(d);
+  } else if (startTimeFilterEl) {
+    startTimeFilterEl.value = '';
+  }
+  if (endTimeFilterEl && parsed.endTime) {
+    const d = new Date(Number(parsed.endTime) * 1000);
+    endTimeFilterEl.value = toDatetimeLocal(d);
+  } else if (endTimeFilterEl) {
+    endTimeFilterEl.value = '';
+  }
+
+  renderTokenPills(parsed.tokens);
+  knownLogIds.clear();
+  refresh();
+}
+
+function toDatetimeLocal(date) {
+  // Returns "YYYY-MM-DDTHH:MM" for datetime-local input
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ─────────────────────────────────────────
+// Token pills
+// ─────────────────────────────────────────
+function renderTokenPills(tokens) {
+  let pillBar = document.getElementById('queryPillBar');
+  if (!pillBar) return;
+
+  pillBar.innerHTML = '';
+  if (!tokens.length) {
+    pillBar.hidden = true;
+    return;
+  }
+  pillBar.hidden = false;
+
+  for (const token of tokens) {
+    const pill = document.createElement('span');
+    pill.className = 'query-pill' + (token.valid ? '' : ' query-pill-error');
+    if (token.error) pill.title = token.error;
+
+    const keyEl = document.createElement('span');
+    keyEl.className   = 'pill-key';
+    keyEl.textContent = token.rawKey;
+
+    const sep = document.createElement('span');
+    sep.className   = 'pill-sep';
+    sep.textContent = ':';
+
+    const valEl = document.createElement('span');
+    valEl.className = 'pill-val';
+
+    // For level tokens, colour-code the value
+    if (token.key === 'level' && token.valid) {
+      const parts = token.value.split(',').map((p) => p.trim().toUpperCase()).filter(Boolean);
+      parts.forEach((p, i) => {
+        const s = document.createElement('span');
+        s.className   = `pill-level-${p.toLowerCase()}`;
+        s.textContent = p.charAt(0) + p.slice(1).toLowerCase();
+        valEl.appendChild(s);
+        if (i < parts.length - 1) {
+          const comma = document.createElement('span');
+          comma.className   = 'pill-sep';
+          comma.textContent = ',';
+          valEl.appendChild(comma);
+        }
+      });
+    } else {
+      valEl.textContent = token.value;
+    }
+
+    const dismiss = document.createElement('button');
+    dismiss.className   = 'pill-dismiss';
+    dismiss.textContent = '×';
+    dismiss.setAttribute('aria-label', `Remove ${token.rawKey} filter`);
+    dismiss.addEventListener('click', () => removeToken(token));
+
+    pill.append(keyEl, sep, valEl, dismiss);
+    pillBar.appendChild(pill);
+  }
+}
+
+/** Remove a single token from the search bar and re-parse */
+function removeToken(token) {
+  // Re-build raw query string without this token
+  const current = searchInput.value;
+  // Match "rawKey:value" with possible quoting, remove it
+  const escaped = token.rawKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:^|\\s)${escaped}:(?:"[^"]*"|'[^']*'|\\S+)`, 'i');
+  const next = current.replace(re, ' ').replace(/\s{2,}/g, ' ').trim();
+  searchInput.value = next;
+  const parsed = parseQuery(next);
+  applyParsedQuery(parsed);
+}
+
+// ─────────────────────────────────────────
+// Autocomplete ghost
+// ─────────────────────────────────────────
+// Shows a ghost hint in the search bar for known keyword prefixes.
+// E.g. typing "leve" shows ghost "l:" in muted text.
+// Canvas used to measure text width for ghost offset
+let _measureCanvas = null;
+function measureTextWidth(text, font) {
+  if (!_measureCanvas) _measureCanvas = document.createElement('canvas');
+  const ctx = _measureCanvas.getContext('2d');
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+function updateAutocompleteHint(raw) {
+  const ghostEl = document.getElementById('searchGhost');
+  if (!ghostEl) return;
+
+  // Find the last "word" the user is typing (no space yet, at end of input)
+  const lastWord = raw.split(/\s+/).pop();
+  if (!lastWord || lastWord.includes(':')) {
+    ghostEl.textContent = '';
+    return;
+  }
+
+  // Suggest the first known key that starts with what they've typed
+  const match = KNOWN_KEYS.find(
+    (k) => k.startsWith(lastWord.toLowerCase()) && k !== lastWord.toLowerCase()
   );
+  if (match) {
+    // Completion suffix + ":"
+    const completion = match.slice(lastWord.length) + ':';
+    ghostEl.textContent = completion;
+
+    // Offset ghost to appear right after the typed text
+    // Measure the full input value width to position the ghost
+    const style = window.getComputedStyle(searchInput);
+    const font  = `${style.fontSize} ${style.fontFamily}`;
+    const inputPadLeft = parseFloat(style.paddingLeft) || 0;
+    const textWidth = measureTextWidth(raw, font);
+    ghostEl.style.setProperty('--ghost-offset', `${inputPadLeft + textWidth}px`);
+  } else {
+    ghostEl.textContent = '';
+  }
+}
+
+// Accept ghost with Tab
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    const ghostEl = document.getElementById('searchGhost');
+    if (ghostEl && ghostEl.textContent) {
+      e.preventDefault();
+      searchInput.value = searchInput.value + ghostEl.textContent;
+      ghostEl.textContent = '';
+      // Don't trigger a full re-parse yet — user is still typing
+    }
+  }
+});
+
+// ─────────────────────────────────────────
+// Search input → debounced parse + apply
+// ─────────────────────────────────────────
+searchInput.addEventListener('input', () => {
+  updateAutocompleteHint(searchInput.value);
+
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    const parsed = parseQuery(searchInput.value);
+    applyParsedQuery(parsed);
+  }, 220);
+});
+
+// ─────────────────────────────────────────
+// Log feed — client-side message + id filter
+// ─────────────────────────────────────────
+function applyClientFilter(logs) {
+  let out = logs;
+
+  // Free-text message search
+  const q = (activeFilters.search || '').trim().toLowerCase();
+  if (q) {
+    out = out.filter((l) =>
+      l.message.toLowerCase().includes(q) ||
+      String(l.gameId).includes(q) ||
+      l.level.toLowerCase().includes(q)
+    );
+  }
+
+  // Specific log ID filter (client-side only)
+  if (activeFilters.logId) {
+    const targetId = Number(activeFilters.logId);
+    out = out.filter((l) => l.id === targetId);
+  }
+
+  return out;
 }
 
 function renderLogs(logs, total) {
-  const filtered = applySearchFilter(logs ?? []);
+  const filtered = applyClientFilter(logs ?? []);
 
   if (logTotalEl) {
     const shown = filtered.length;
     logTotalEl.textContent = total != null
-      ? (activeFilters.search ? `${shown} of ${total.toLocaleString()}` : `${total.toLocaleString()} total`)
+      ? (activeFilters.search || activeFilters.logId
+          ? `${shown} of ${total.toLocaleString()}`
+          : `${total.toLocaleString()} total`)
       : '';
   }
 
@@ -293,14 +655,12 @@ function renderLogs(logs, total) {
   const newIds    = new Set(logsById.keys());
   const firstLoad = knownLogIds.size === 0;
 
-  // Remove rows no longer in the result
   [...logFeedEl.querySelectorAll('.log-row')].forEach((row) => {
     const id = Number(row.dataset.id);
     if (!newIds.has(id)) { row.remove(); }
     else { updateLogRow(row, logsById.get(id)); }
   });
 
-  // Prepend new rows
   for (const log of [...filtered].reverse()) {
     if (!knownLogIds.has(log.id)) {
       const row = buildLogRow(log, !firstLoad);
@@ -310,7 +670,6 @@ function renderLogs(logs, total) {
 
   knownLogIds = newIds;
 
-  // If the selected log is no longer visible, close drawer
   if (selectedLogId !== null && !newIds.has(selectedLogId)) {
     closeDrawer();
   }
@@ -330,7 +689,6 @@ function updateLogRow(row, log) {
     countEl.textContent = `×${log.count}`;
   } else if (countEl) { countEl.remove(); }
 
-  // Keep selected highlight in sync
   row.classList.toggle('selected', log.id === selectedLogId);
 }
 
@@ -369,9 +727,7 @@ function buildLogRow(log, animate = false) {
   }
 
   row.append(time, game, badge, msgWrap);
-
   row.addEventListener('click', () => openDrawer(log));
-
   return row;
 }
 
@@ -385,14 +741,12 @@ function formatTime(ts) {
 function openDrawer(log) {
   selectedLogId = log.id;
 
-  // Update row highlight
   document.querySelectorAll('.log-row').forEach((r) => {
     r.classList.toggle('selected', Number(r.dataset.id) === log.id);
   });
 
   detailBody.innerHTML = '';
 
-  // ── Level + timestamp ──
   const sec1 = makeDetailSection('Overview');
 
   const levelBadge = document.createElement('span');
@@ -406,11 +760,19 @@ function openDrawer(log) {
   if (log.count > 1) {
     sec1.appendChild(makeDetailField('Occurrences', `×${log.count} (deduplicated)`));
   }
-  detailBody.appendChild(sec1);
 
+  // Quick-filter button inside the drawer — clicking game ID adds it to the search bar
+  const gfBtn = document.createElement('button');
+  gfBtn.className   = 'detail-filter-btn';
+  gfBtn.textContent = `Filter by game ${log.gameId}`;
+  gfBtn.addEventListener('click', () => {
+    injectQueryToken(`game:${log.gameId}`);
+  });
+  sec1.appendChild(gfBtn);
+
+  detailBody.appendChild(sec1);
   detailBody.appendChild(makeDivider());
 
-  // ── Message ──
   const sec2 = makeDetailSection('Message');
   const msgBlock = document.createElement('pre');
   msgBlock.className   = 'detail-message-block';
@@ -429,10 +791,8 @@ function openDrawer(log) {
   });
   sec2.appendChild(copyBtn);
   detailBody.appendChild(sec2);
-
   detailBody.appendChild(makeDivider());
 
-  // ── Raw JSON ──
   const sec3 = makeDetailSection('Raw JSON');
   const jsonBlock = document.createElement('pre');
   jsonBlock.className   = 'detail-message-block';
@@ -462,6 +822,30 @@ function openDrawer(log) {
 
   detailDrawer.classList.add('open');
   detailDrawer.setAttribute('aria-hidden', 'false');
+}
+
+/**
+ * Inject or update a key:value token in the search bar.
+ * If that key already exists, replaces its value; otherwise appends.
+ */
+function injectQueryToken(tokenStr) {
+  const [k, v] = tokenStr.split(':');
+  const canonical = TOKEN_ALIASES[k.toLowerCase()];
+  if (!canonical) return;
+
+  let current = searchInput.value;
+
+  // Remove any existing token with same canonical key
+  for (const alias of Object.entries(TOKEN_ALIASES).filter(([,c]) => c === canonical).map(([a]) => a)) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?:^|\\s)${escaped}:(?:"[^"]*"|'[^']*'|\\S+)`, 'gi');
+    current = current.replace(re, ' ');
+  }
+
+  current = (current.trim() + ' ' + tokenStr).trim().replace(/\s{2,}/g, ' ');
+  searchInput.value = current;
+  const parsed = parseQuery(current);
+  applyParsedQuery(parsed);
 }
 
 function closeDrawer() {
@@ -502,12 +886,10 @@ function makeDivider() {
 
 detailClose.addEventListener('click', closeDrawer);
 
-// Escape key closes drawer
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && detailDrawer.classList.contains('open')) {
     closeDrawer();
   }
-  // '/' focuses search (unless already in an input)
   if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
     e.preventDefault();
     searchInput.focus();
@@ -516,27 +898,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─────────────────────────────────────────
-// Search
-// ─────────────────────────────────────────
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
-    activeFilters.search = searchInput.value;
-    // Re-filter the last fetched data instantly (no extra network call)
-    refresh();
-  }, 180);
-});
-
-// ─────────────────────────────────────────
-// Filter extras toggle
-// ─────────────────────────────────────────
-toggleFiltersBtn.addEventListener('click', () => {
-  filterExtrasEl.classList.toggle('open');
-  toggleFiltersBtn.classList.toggle('active');
-});
-
-// ─────────────────────────────────────────
-// Filter apply / clear
+// Legacy checkbox / extras UI (still works,
+// writes back to search bar in query syntax)
 // ─────────────────────────────────────────
 function toUnixSeconds(v) {
   if (!v) return '';
@@ -544,29 +907,50 @@ function toUnixSeconds(v) {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : '';
 }
 
-applyFiltersBtn.addEventListener('click', () => {
+function syncLegacyToSearchBar() {
   const checkedLevels = [...levelCheckboxes].filter((cb) => cb.checked).map((cb) => cb.value);
-  activeFilters = {
-    ...activeFilters,
-    levels:    checkedLevels,
-    gameId:    gameIdFilterEl.value.trim(),
-    startTime: toUnixSeconds(startTimeFilterEl.value),
-    endTime:   toUnixSeconds(endTimeFilterEl.value),
-  };
-  knownLogIds.clear();
-  refresh();
-});
+  const gameId        = gameIdFilterEl ? gameIdFilterEl.value.trim() : '';
+  const startTs       = toUnixSeconds(startTimeFilterEl ? startTimeFilterEl.value : '');
+  const endTs         = toUnixSeconds(endTimeFilterEl   ? endTimeFilterEl.value   : '');
 
-clearFiltersBtn.addEventListener('click', () => {
-  levelCheckboxes.forEach((cb) => (cb.checked = false));
-  gameIdFilterEl.value    = '';
-  startTimeFilterEl.value = '';
-  endTimeFilterEl.value   = '';
-  searchInput.value       = '';
-  activeFilters = { search: '', levels: [], gameId: '', startTime: '', endTime: '' };
-  knownLogIds.clear();
-  refresh();
-});
+  const parts = [];
+  if (checkedLevels.length) parts.push(`level:${checkedLevels.join(',').toLowerCase()}`);
+  if (gameId)  parts.push(`game:${gameId}`);
+  if (startTs) parts.push(`after:${startTs}`);
+  if (endTs)   parts.push(`before:${endTs}`);
+
+  // Preserve any existing free text from the search bar
+  const currentParsed = parseQuery(searchInput.value);
+  if (currentParsed.search) parts.push(currentParsed.search);
+
+  const next = parts.join(' ');
+  searchInput.value = next;
+  const parsed = parseQuery(next);
+  applyParsedQuery(parsed);
+}
+
+if (applyFiltersBtn) {
+  applyFiltersBtn.addEventListener('click', syncLegacyToSearchBar);
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    levelCheckboxes.forEach((cb) => (cb.checked = false));
+    if (gameIdFilterEl)    gameIdFilterEl.value    = '';
+    if (startTimeFilterEl) startTimeFilterEl.value = '';
+    if (endTimeFilterEl)   endTimeFilterEl.value   = '';
+    searchInput.value = '';
+    const parsed = parseQuery('');
+    applyParsedQuery(parsed);
+  });
+}
+
+if (toggleFiltersBtn) {
+  toggleFiltersBtn.addEventListener('click', () => {
+    filterExtrasEl.classList.toggle('open');
+    toggleFiltersBtn.classList.toggle('active');
+  });
+}
 
 // ─────────────────────────────────────────
 // Init
