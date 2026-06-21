@@ -93,6 +93,21 @@
         <span class="nav-brand-mark">T</span>
       </div>
 
+      <div class="nav-ws-switcher" id="navWsSwitcher">
+        <button type="button" class="nav-ws-btn" id="navWsBtn" aria-haspopup="true" aria-expanded="false" title="Switch workspace">
+          <span id="navWsInitial">·</span>
+        </button>
+        <div class="nav-ws-panel" id="navWsPanel" role="menu" hidden>
+          <div class="nav-ws-panel-title">Workspaces</div>
+          <div class="nav-ws-list" id="navWsList"></div>
+          <div class="nav-ws-divider"></div>
+          <button type="button" class="nav-ws-new-btn" id="navWsNewBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>New workspace</span>
+          </button>
+        </div>
+      </div>
+
       <ul class="nav-items" role="list">
         <li>
           <button class="nav-item active" data-view="logs" aria-label="Logs" title="Logs">
@@ -291,13 +306,22 @@
             </div>
 
             <div class="settings-card">
-              <h2 class="section-title">Workspace</h2>
-              <div class="settings-row">
-                <div class="settings-row-text">
-                  <span class="settings-row-label" id="workspaceNameLabel">—</span>
-                  <span class="settings-row-desc">API key ending in <code id="workspaceKeyLast4">····</code> — the full key was shown once at creation and can't be retrieved again. Roblox games use it to post logs into this workspace.</span>
-                </div>
+              <h2 class="section-title">Workspaces</h2>
+              <p class="settings-hint">One workspace per game — each gets its own API key, so logs from different games never mix.</p>
+
+              <div class="ws-list" id="wsSettingsList"></div>
+
+              <div class="ws-new-row">
+                <input id="wsNewNameInput" type="text" class="filter-input" placeholder="New workspace name (e.g. My Game)" autocomplete="off" maxlength="80" />
+                <button type="button" id="wsNewCreateBtn" class="btn-primary btn-sm">Create</button>
               </div>
+              <p class="ws-new-error" id="wsNewError" hidden></p>
+
+              <div class="api-key-box" id="wsNewKeyBox" hidden>
+                <code id="wsNewKeyValue"></code>
+                <button type="button" id="wsNewKeyCopyBtn" class="btn-ghost btn-sm">Copy</button>
+              </div>
+              <p class="ws-new-key-note" id="wsNewKeyNote" hidden>Save this now — it won't be shown again. Paste it into that game's <code>tracelyKey</code> config.</p>
             </div>
 
             <div class="settings-card">

@@ -325,6 +325,91 @@ button, input, select, textarea { font-family: inherit; }
 .nav-status { display: flex; align-items: center; justify-content: center; }
 
 /* ─────────────────────────────────────────
+   NAV WORKSPACE SWITCHER
+───────────────────────────────────────── */
+.nav-ws-switcher { position: relative; margin-bottom: 14px; }
+
+.nav-ws-btn {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12.5px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.12s var(--ease), background 0.12s var(--ease);
+}
+.nav-ws-btn:hover { border-color: var(--text-secondary); }
+.nav-ws-btn[aria-expanded="true"] { border-color: var(--info); }
+
+.nav-ws-panel {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: -4px;
+  width: 230px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 16px 40px -12px rgba(0,0,0,0.6);
+  padding: 6px;
+  z-index: 60;
+}
+.nav-ws-panel[hidden] { display: none; }
+
+.nav-ws-panel-title {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 6px 8px 4px;
+}
+
+.nav-ws-list {
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.nav-ws-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  background: transparent; border: none; border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px; font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s var(--ease), color 0.1s var(--ease);
+}
+.nav-ws-row:hover { background: var(--surface-hover); color: var(--text); }
+.nav-ws-row.active { color: var(--text); background: rgba(59,130,246,0.10); }
+
+.nav-ws-row-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-dim);
+}
+.nav-ws-row.active .nav-ws-row-dot { background: var(--info); }
+
+.nav-ws-row-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.nav-ws-divider { height: 1px; background: var(--border); margin: 5px 2px; }
+
+.nav-ws-new-btn {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%;
+  background: transparent; border: none; border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px; font-family: inherit; font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.1s var(--ease), color 0.1s var(--ease);
+}
+.nav-ws-new-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ─────────────────────────────────────────
    WORKSPACE  (feed + drawer side by side)
 ───────────────────────────────────────── */
 .workspace {
@@ -1124,6 +1209,48 @@ html.theme-light .segmented-btn.active {
 }
 .redaction-tag-remove:hover { color: var(--error); background: rgba(239,68,68,0.12); }
 .redaction-empty-hint { font-size: 12px; color: var(--text-dim); }
+
+/* Workspaces list (Settings) */
+.ws-list { display: flex; flex-direction: column; gap: 6px; }
+.ws-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.ws-row.active { border-color: rgba(59,130,246,0.4); }
+.ws-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ws-row-name {
+  font-size: 13.5px; font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-row-key {
+  font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+}
+.ws-row-current {
+  font-size: 11px; font-weight: 600;
+  color: var(--info);
+  background: rgba(59,130,246,0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+.ws-new-row { display: flex; gap: 8px; }
+.ws-new-row .filter-input { flex: 1; }
+.ws-new-error { margin: -6px 0 0; font-size: 12px; color: var(--error); }
+.ws-new-key-note {
+  margin: -6px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+}
+.ws-new-key-note code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text);
+}
 
 /* Redacted text inline in logs/drawer */
 .redacted-mask {

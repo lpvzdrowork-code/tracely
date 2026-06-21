@@ -62,11 +62,26 @@ const detailClose  = document.getElementById('detailClose');
 // ── Nav ──
 const navItems = document.querySelectorAll('.nav-item');
 
+// ── Workspace switcher (nav) ──
+const navWsBtn     = document.getElementById('navWsBtn');
+const navWsPanel   = document.getElementById('navWsPanel');
+const navWsList    = document.getElementById('navWsList');
+const navWsInitial = document.getElementById('navWsInitial');
+const navWsNewBtn  = document.getElementById('navWsNewBtn');
+
+// ── Workspaces (Settings) ──
+const wsSettingsList  = document.getElementById('wsSettingsList');
+const wsNewNameInput  = document.getElementById('wsNewNameInput');
+const wsNewCreateBtn  = document.getElementById('wsNewCreateBtn');
+const wsNewError      = document.getElementById('wsNewError');
+const wsNewKeyBox     = document.getElementById('wsNewKeyBox');
+const wsNewKeyValue   = document.getElementById('wsNewKeyValue');
+const wsNewKeyCopyBtn = document.getElementById('wsNewKeyCopyBtn');
+const wsNewKeyNote    = document.getElementById('wsNewKeyNote');
+
 // ── Settings ──
 const lockBtn             = document.getElementById('lockBtn');
 const accountEmailHint    = document.getElementById('accountEmailHint');
-const workspaceNameLabel  = document.getElementById('workspaceNameLabel');
-const workspaceKeyLast4El = document.getElementById('workspaceKeyLast4');
 
 // ─────────────────────────────────────────
 // State
@@ -93,7 +108,9 @@ let activeFilters = {
 };
 
 let currentUser      = null; // { id, email }
-let currentWorkspace = null; // { id, name, apiKeyLast4 } — the one workspace this account uses
+let currentWorkspace = null; // { id, name, apiKeyLast4 } — the active workspace
+let allWorkspaces    = [];   // every workspace this account owns — [{ id, name, apiKeyLast4, createdAt }]
+const ACTIVE_WS_KEY  = 'tracelyActiveWorkspaceId'; // remembers the last-picked workspace across reloads
 let authMode          = 'login'; // 'login' | 'signup'
 
 // ─────────────────────────────────────────
@@ -141,11 +158,11 @@ function showAuthError(message) {
 async function checkExistingSession() {
   try {
     const res = await fetch('/api/workspaces', { credentials: 'same-origin' });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const data = await res.json();
-    return data.workspaces?.[0] ?? null;
+    return data.workspaces ?? [];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -198,7 +215,8 @@ authForm.addEventListener('submit', async (e) => {
         return;
       }
       currentUser = data.user;
-      const workspace = data.workspaces?.[0];
+      allWorkspaces = data.workspaces ?? [];
+      const workspace = pickInitialWorkspace(allWorkspaces);
       if (!workspace) {
         showAuthError('No workspace found on this account yet.');
         return;
@@ -214,6 +232,7 @@ authForm.addEventListener('submit', async (e) => {
 
 function showApiKeyReveal(workspace) {
   currentWorkspace = { id: workspace.id, name: workspace.name, apiKeyLast4: workspace.apiKeyLast4 };
+  allWorkspaces = [{ id: workspace.id, name: workspace.name, apiKeyLast4: workspace.apiKeyLast4, createdAt: workspace.createdAt }];
   authForm.hidden = true;
   apiKeyValueEl.textContent = workspace.apiKey;
   apiKeyCopiedNote.hidden = true;
@@ -238,28 +257,38 @@ if (apiKeyContinueBtn) {
 
 function enterDashboard(workspace) {
   currentWorkspace = { id: workspace.id, name: workspace.name, apiKeyLast4: workspace.apiKeyLast4 };
+  setActiveWorkspaceId(currentWorkspace.id);
+  if (!allWorkspaces.some((w) => Number(w.id) === Number(currentWorkspace.id))) {
+    allWorkspaces = [...allWorkspaces, currentWorkspace];
+  }
   authForm.reset();
   authForm.hidden = false;
   apiKeyReveal.hidden = true;
   unlockApp();
+  renderWorkspaceSwitcher();
+  renderWorkspacesSettingsList();
+  updateOnboardingSnippet();
   if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
+}
 
-  // Populate the onboarding snippet with real host + key hint
+// Populates the "send your first log" snippet in the empty-state with the
+// current workspace's host + key hint. Pulled out of enterDashboard so
+// switchWorkspace() can refresh it too when the active workspace changes.
+function updateOnboardingSnippet() {
   const snippetEl = document.getElementById('onboardSnippet');
-  if (snippetEl) {
-    const host = window.location.host;
-    const key  = currentWorkspace?.apiKeyLast4
-      ? `tracely_live_…${currentWorkspace.apiKeyLast4}`
-      : 'tracely_live_…';
-    snippetEl.innerHTML =
-      `HttpService:PostAsync("https://${host}/api/log", HttpService:JSONEncode({<br>` +
-      `&nbsp;&nbsp;tracelyKey = "${key}",<br>` +
-      `&nbsp;&nbsp;level = "INFO",<br>` +
-      `&nbsp;&nbsp;message = "Hello from Roblox",<br>` +
-      `&nbsp;&nbsp;timestamp = os.time(),<br>` +
-      `&nbsp;&nbsp;gameId = game.GameId<br>` +
-      `}))`;
-  }
+  if (!snippetEl) return;
+  const host = window.location.host;
+  const key  = currentWorkspace?.apiKeyLast4
+    ? `tracely_live_…${currentWorkspace.apiKeyLast4}`
+    : 'tracely_live_…';
+  snippetEl.innerHTML =
+    `HttpService:PostAsync("https://${host}/api/log", HttpService:JSONEncode({<br>` +
+    `&nbsp;&nbsp;tracelyKey = "${key}",<br>` +
+    `&nbsp;&nbsp;level = "INFO",<br>` +
+    `&nbsp;&nbsp;message = "Hello from Roblox",<br>` +
+    `&nbsp;&nbsp;timestamp = os.time(),<br>` +
+    `&nbsp;&nbsp;gameId = game.GameId<br>` +
+    `}))`;
 }
 
 function unlockApp() {
@@ -273,14 +302,6 @@ function updateAccountInfo() {
   if (accountEmailHint && currentUser) {
     accountEmailHint.textContent = `Signed in as ${currentUser.email}.`;
   }
-  if (workspaceNameLabel && currentWorkspace) {
-    workspaceNameLabel.textContent = currentWorkspace.name;
-  }
-  if (workspaceKeyLast4El) {
-    workspaceKeyLast4El.textContent = currentWorkspace?.apiKeyLast4
-      ? `····${currentWorkspace.apiKeyLast4}`
-      : '····';
-  }
 }
 
 async function lockApp(message) {
@@ -292,6 +313,7 @@ async function lockApp(message) {
   }
   currentUser = null;
   currentWorkspace = null;
+  allWorkspaces = [];
   stopPolling();
   appEl.hidden = true;
   authOverlay.hidden = false;
@@ -300,6 +322,12 @@ async function lockApp(message) {
   authForm.reset();
   setAuthMode('login');
   setAuthLoading(false);
+  closeWsSwitcherPanel();
+  if (navWsList) navWsList.innerHTML = '';
+  if (wsSettingsList) wsSettingsList.innerHTML = '';
+  if (wsNewKeyBox)  wsNewKeyBox.hidden = true;
+  if (wsNewKeyNote) wsNewKeyNote.hidden = true;
+  if (wsNewNameInput) wsNewNameInput.value = '';
   if (message) showAuthError(message);
 }
 
@@ -321,6 +349,232 @@ navItems.forEach((btn) => {
     if (view === 'metrics' && chart) chart.update();
   });
 });
+
+// ─────────────────────────────────────────
+// WORKSPACES (multi-workspace switcher)
+//
+// One Tracely account can own several workspaces (one per Roblox game).
+// `allWorkspaces` is the full list for the signed-in account; `currentWorkspace`
+// is whichever one is active in the dashboard right now. The active choice is
+// remembered in localStorage so a reload doesn't always snap back to the
+// first workspace in the list.
+// ─────────────────────────────────────────
+
+function pickInitialWorkspace(list) {
+  if (!list || !list.length) return null;
+  const savedId = Number(localStorage.getItem(ACTIVE_WS_KEY));
+  const saved = list.find((w) => Number(w.id) === savedId);
+  return saved || list[0];
+}
+
+function setActiveWorkspaceId(id) {
+  try { localStorage.setItem(ACTIVE_WS_KEY, String(id)); } catch { /* storage unavailable — not fatal */ }
+}
+
+function renderWorkspaceSwitcher() {
+  if (navWsInitial) {
+    navWsInitial.textContent = currentWorkspace?.name?.trim()?.charAt(0)?.toUpperCase() || '?';
+  }
+  if (navWsBtn) {
+    navWsBtn.title = currentWorkspace ? `Workspace: ${currentWorkspace.name}` : 'Switch workspace';
+  }
+  if (!navWsList) return;
+
+  navWsList.innerHTML = '';
+  for (const ws of allWorkspaces) {
+    const isActive = !!currentWorkspace && Number(ws.id) === Number(currentWorkspace.id);
+
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'nav-ws-row' + (isActive ? ' active' : '');
+    row.dataset.id = ws.id;
+    row.setAttribute('role', 'menuitem');
+
+    const dot = document.createElement('span');
+    dot.className = 'nav-ws-row-dot';
+
+    const name = document.createElement('span');
+    name.className = 'nav-ws-row-name';
+    name.textContent = ws.name;
+
+    row.append(dot, name);
+    row.addEventListener('click', () => {
+      closeWsSwitcherPanel();
+      if (!isActive) switchWorkspace(ws.id);
+    });
+    navWsList.appendChild(row);
+  }
+}
+
+function renderWorkspacesSettingsList() {
+  if (!wsSettingsList) return;
+  wsSettingsList.innerHTML = '';
+
+  for (const ws of allWorkspaces) {
+    const isActive = !!currentWorkspace && Number(ws.id) === Number(currentWorkspace.id);
+
+    const row = document.createElement('div');
+    row.className = 'ws-row' + (isActive ? ' active' : '');
+
+    const text = document.createElement('div');
+    text.className = 'ws-row-text';
+
+    const name = document.createElement('span');
+    name.className = 'ws-row-name';
+    name.textContent = ws.name;
+
+    const key = document.createElement('span');
+    key.className = 'ws-row-key';
+    key.textContent = `····${ws.apiKeyLast4 ?? '····'}`;
+
+    text.append(name, key);
+    row.appendChild(text);
+
+    if (isActive) {
+      const badge = document.createElement('span');
+      badge.className = 'ws-row-current';
+      badge.textContent = 'Current';
+      row.appendChild(badge);
+    } else {
+      const switchBtn = document.createElement('button');
+      switchBtn.type = 'button';
+      switchBtn.className = 'btn-ghost btn-sm';
+      switchBtn.textContent = 'Switch';
+      switchBtn.addEventListener('click', () => switchWorkspace(ws.id));
+      row.appendChild(switchBtn);
+    }
+
+    wsSettingsList.appendChild(row);
+  }
+}
+
+function openWsSwitcherPanel() {
+  if (!navWsPanel) return;
+  navWsPanel.hidden = false;
+  if (navWsBtn) navWsBtn.setAttribute('aria-expanded', 'true');
+}
+
+function closeWsSwitcherPanel() {
+  if (!navWsPanel) return;
+  navWsPanel.hidden = true;
+  if (navWsBtn) navWsBtn.setAttribute('aria-expanded', 'false');
+}
+
+if (navWsBtn) {
+  navWsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (navWsPanel.hidden) openWsSwitcherPanel();
+    else closeWsSwitcherPanel();
+  });
+}
+
+if (navWsNewBtn) {
+  navWsNewBtn.addEventListener('click', () => {
+    closeWsSwitcherPanel();
+    // Jump to Settings, where the "create workspace" form lives.
+    document.querySelector('.nav-item[data-view="settings"]')?.click();
+    wsNewNameInput?.focus();
+  });
+}
+
+document.addEventListener('click', (e) => {
+  if (!navWsPanel || navWsPanel.hidden) return;
+  if (navWsPanel.contains(e.target) || navWsBtn?.contains(e.target)) return;
+  closeWsSwitcherPanel();
+});
+
+// Clears every piece of UI state that's specific to the previously-active
+// workspace (rows, chart, stats, selection) so nothing from the old
+// workspace lingers on screen while the new one's first refresh is in flight.
+function resetWorkspaceData() {
+  closeDrawer();
+  knownLogIds = new Set();
+  logDataById = new Map();
+  selectedLogId = null;
+  kbFocusedId = null;
+  if (logFeedEl) logFeedEl.innerHTML = '';
+  renderStats({ counts: {} });
+  renderChart([]);
+}
+
+function switchWorkspace(id) {
+  const ws = allWorkspaces.find((w) => Number(w.id) === Number(id));
+  if (!ws) return;
+
+  currentWorkspace = { id: ws.id, name: ws.name, apiKeyLast4: ws.apiKeyLast4 };
+  setActiveWorkspaceId(currentWorkspace.id);
+
+  resetWorkspaceData();
+  updateAccountInfo();
+  renderWorkspaceSwitcher();
+  renderWorkspacesSettingsList();
+  updateOnboardingSnippet();
+  loadRetentionSetting();
+
+  // Game IDs and filter state belong to the previous workspace — reset the
+  // filter bar to defaults, which (per its own handler) also clears
+  // knownLogIds and triggers a fresh fetch scoped to the new workspace.
+  if (clearFiltersBtn) clearFiltersBtn.click();
+}
+
+async function createNewWorkspace() {
+  const name = (wsNewNameInput?.value || '').trim();
+  if (wsNewError) wsNewError.hidden = true;
+
+  if (!name) {
+    if (wsNewError) { wsNewError.textContent = 'Workspace name is required.'; wsNewError.hidden = false; }
+    return;
+  }
+
+  if (wsNewCreateBtn) wsNewCreateBtn.disabled = true;
+  try {
+    const res = await fetch('/api/workspaces', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (wsNewError) { wsNewError.textContent = data.error || 'Could not create workspace.'; wsNewError.hidden = false; }
+      return;
+    }
+
+    allWorkspaces = [...allWorkspaces, data.workspace];
+    if (wsNewNameInput) wsNewNameInput.value = '';
+
+    // The raw key only ever comes back here, once — show it immediately.
+    if (wsNewKeyValue) wsNewKeyValue.textContent = data.workspace.apiKey;
+    if (wsNewKeyBox)   wsNewKeyBox.hidden = false;
+    if (wsNewKeyNote)  wsNewKeyNote.hidden = false;
+
+    switchWorkspace(data.workspace.id);
+  } catch {
+    if (wsNewError) { wsNewError.textContent = "Couldn't reach the server — try again."; wsNewError.hidden = false; }
+  } finally {
+    if (wsNewCreateBtn) wsNewCreateBtn.disabled = false;
+  }
+}
+
+if (wsNewCreateBtn) wsNewCreateBtn.addEventListener('click', createNewWorkspace);
+if (wsNewNameInput) {
+  wsNewNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); createNewWorkspace(); }
+  });
+}
+if (wsNewKeyCopyBtn) {
+  wsNewKeyCopyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(wsNewKeyValue.textContent);
+      const original = wsNewKeyCopyBtn.textContent;
+      wsNewKeyCopyBtn.textContent = 'Copied';
+      setTimeout(() => { wsNewKeyCopyBtn.textContent = original; }, 1500);
+    } catch {
+      /* Clipboard API unavailable — key is still visible/selectable. */
+    }
+  });
+}
 
 // ─────────────────────────────────────────
 // Polling
@@ -1950,6 +2204,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape' && nukeModalOverlay && !nukeModalOverlay.hidden) closeNukeModal();
+  if (e.key === 'Escape' && navWsPanel && !navWsPanel.hidden) closeWsSwitcherPanel();
 });
 
 // ─────────────────────────────────────────
@@ -1968,12 +2223,13 @@ document.addEventListener('keydown', (e) => {
     btn.addEventListener('click', () => setTzMode(btn.dataset.tz));
   });
 
-  const workspace = await checkExistingSession();
-  if (workspace) {
+  const workspaces = await checkExistingSession();
+  if (workspaces.length) {
     // No user object comes back from /api/workspaces (it's workspace-only),
     // so the email shown in Settings just won't populate until the next
     // login — the session itself is still perfectly valid.
-    enterDashboard(workspace);
+    allWorkspaces = workspaces;
+    enterDashboard(pickInitialWorkspace(workspaces));
     loadRetentionSetting();
   }
 })();
