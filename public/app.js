@@ -3,19 +3,27 @@
    Three-pane workspace logic
 ───────────────────────────────────────── */
 
-const STORAGE_KEY  = 'tracelyKey';
 const REFRESH_MS   = 5000;
 const LEVEL_COLORS = { INFO: '#3b82f6', WARN: '#f59e0b', ERROR: '#ef4444' };
 
 // ── Auth elements ──
-const authOverlay        = document.getElementById('authOverlay');
-const authForm            = document.getElementById('authForm');
-const authInput           = document.getElementById('authInput');
-const authError           = document.getElementById('authError');
-const authSubmitBtn       = document.getElementById('authSubmitBtn');
-const authSubmitLabel     = document.querySelector('.auth-submit-label');
-const authSpinner         = document.querySelector('.auth-spinner');
-const rememberMeCheckbox  = document.getElementById('rememberMeCheckbox');
+const authOverlay       = document.getElementById('authOverlay');
+const authForm           = document.getElementById('authForm');
+const authTabs           = document.querySelectorAll('.auth-tab');
+const authEmail          = document.getElementById('authEmail');
+const authPassword       = document.getElementById('authPassword');
+const authWorkspaceName  = document.getElementById('authWorkspaceName');
+const authError          = document.getElementById('authError');
+const authSubmitBtn      = document.getElementById('authSubmitBtn');
+const authSubmitLabel    = document.querySelector('.auth-submit-label');
+const authSpinner        = document.querySelector('.auth-spinner');
+
+// ── API key reveal (shown once, right after signup) ──
+const apiKeyReveal      = document.getElementById('apiKeyReveal');
+const apiKeyValueEl     = document.getElementById('apiKeyValue');
+const apiKeyCopyBtn     = document.getElementById('apiKeyCopyBtn');
+const apiKeyCopiedNote  = document.getElementById('apiKeyCopiedNote');
+const apiKeyContinueBtn = document.getElementById('apiKeyContinueBtn');
 
 // ── App shell ──
 const appEl       = document.getElementById('app');
@@ -52,7 +60,10 @@ const detailClose  = document.getElementById('detailClose');
 const navItems = document.querySelectorAll('.nav-item');
 
 // ── Settings ──
-const lockBtn = document.getElementById('lockBtn');
+const lockBtn             = document.getElementById('lockBtn');
+const accountEmailHint    = document.getElementById('accountEmailHint');
+const workspaceNameLabel  = document.getElementById('workspaceNameLabel');
+const workspaceKeyLast4El = document.getElementById('workspaceKeyLast4');
 
 // ─────────────────────────────────────────
 // State
@@ -78,54 +89,37 @@ let activeFilters = {
   endTimeRelative: '',
 };
 
+let currentUser      = null; // { id, email }
+let currentWorkspace = null; // { id, name, apiKeyLast4 } — the one workspace this account uses
+let authMode          = 'login'; // 'login' | 'signup'
+
 // ─────────────────────────────────────────
 // Auth
 //
-// The key is held in sessionStorage by default (cleared when the tab
-// closes). Checking "Keep me logged in" instead persists it to
-// localStorage, which survives closing the tab/browser — convenient for a
-// daily-use dev tool, but it also means the key sticks around indefinitely
-// and is readable by any script that ever runs on this page. It's opt-in
-// for that reason; getStoredKey() checks both so the rest of the app
-// doesn't care which one a given session used.
+// There's no client-held secret anymore. /api/login and /api/signup set an
+// HttpOnly session cookie (lib/session.js); the browser attaches it to
+// every same-origin request automatically, so app.js never reads or
+// stores it. Every dashboard fetch below just needs the current
+// workspaceId as a query param (GET) or body field (POST) — the server
+// resolves "who's asking" from the cookie via requireWorkspace().
 // ─────────────────────────────────────────
-const REMEMBER_KEY = 'tracelyRememberMe';
 
-function getStoredKey() {
-  return sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+function setAuthMode(mode) {
+  authMode = mode;
+  authTabs.forEach((tab) => {
+    const active = tab.dataset.mode === mode;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  authWorkspaceName.hidden = mode !== 'signup';
+  authPassword.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  authSubmitLabel.textContent = mode === 'signup' ? 'Sign up' : 'Log in';
+  authError.hidden = true;
 }
 
-function storeKey(key, remember) {
-  if (remember) {
-    localStorage.setItem(STORAGE_KEY, key);
-    localStorage.setItem(REMEMBER_KEY, '1');
-    sessionStorage.removeItem(STORAGE_KEY);
-  } else {
-    sessionStorage.setItem(STORAGE_KEY, key);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(REMEMBER_KEY);
-  }
-}
-
-function clearStoredKey() {
-  sessionStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(REMEMBER_KEY);
-}
-
-function authHeaders() {
-  const key = getStoredKey();
-  return key ? { 'x-tracely-key': key } : {};
-}
-
-async function tryUnlock(key) {
-  try {
-    const res = await fetch('/api/stats', { headers: { 'x-tracely-key': key } });
-    return { ok: res.ok, networkError: false };
-  } catch {
-    return { ok: false, networkError: true };
-  }
-}
+authTabs.forEach((tab) => {
+  tab.addEventListener('click', () => setAuthMode(tab.dataset.mode));
+});
 
 function setAuthLoading(loading) {
   authSubmitBtn.disabled = loading;
@@ -138,55 +132,148 @@ function showAuthError(message) {
   authError.hidden = false;
 }
 
+// GET /api/workspaces doubles as "am I already logged in?" on page load —
+// a 401 just means there's no valid session cookie yet, which is the
+// normal logged-out state, not a real error.
+async function checkExistingSession() {
+  try {
+    const res = await fetch('/api/workspaces', { credentials: 'same-origin' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.workspaces?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const key = authInput.value.trim();
-  if (!key) return;
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  if (!email || !password) return;
 
   authError.hidden = true;
   setAuthLoading(true); // fires immediately on submit, not after the request resolves
 
-  const { ok, networkError } = await tryUnlock(key);
-
-  setAuthLoading(false);
-
-  if (!ok) {
-    showAuthError(
-      networkError
-        ? "Couldn't reach the server — check your connection and try again."
-        : 'Invalid key. Please check your Tracely project credentials.'
-    );
-    return;
+  try {
+    if (authMode === 'signup') {
+      const workspaceName = authWorkspaceName.value.trim();
+      const res = await fetch('/api/signup', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, workspaceName: workspaceName || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showAuthError(data.error || 'Could not create your account.');
+        return;
+      }
+      currentUser = data.user;
+      if (data.workspace) {
+        // Raw apiKey is only ever present in this one response — show it
+        // before letting the person into the dashboard.
+        showApiKeyReveal(data.workspace);
+      } else {
+        showAuthError(data.warning || 'Account created, but workspace setup failed.');
+      }
+    } else {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showAuthError(data.error || 'Invalid email or password.');
+        return;
+      }
+      currentUser = data.user;
+      const workspace = data.workspaces?.[0];
+      if (!workspace) {
+        showAuthError('No workspace found on this account yet.');
+        return;
+      }
+      enterDashboard(workspace);
+    }
+  } catch {
+    showAuthError("Couldn't reach the server — check your connection and try again.");
+  } finally {
+    setAuthLoading(false);
   }
+});
 
-  storeKey(key, rememberMeCheckbox.checked);
+function showApiKeyReveal(workspace) {
+  currentWorkspace = { id: workspace.id, name: workspace.name, apiKeyLast4: workspace.apiKeyLast4 };
+  authForm.hidden = true;
+  apiKeyValueEl.textContent = workspace.apiKey;
+  apiKeyCopiedNote.hidden = true;
+  apiKeyReveal.hidden = false;
+}
+
+if (apiKeyCopyBtn) {
+  apiKeyCopyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(apiKeyValueEl.textContent);
+      apiKeyCopiedNote.hidden = false;
+    } catch {
+      /* Clipboard API unavailable (e.g. http://, older browser) — the key
+         is still visible and selectable, so this isn't a hard failure. */
+    }
+  });
+}
+
+if (apiKeyContinueBtn) {
+  apiKeyContinueBtn.addEventListener('click', () => enterDashboard(currentWorkspace));
+}
+
+function enterDashboard(workspace) {
+  currentWorkspace = { id: workspace.id, name: workspace.name, apiKeyLast4: workspace.apiKeyLast4 };
+  authForm.reset();
+  authForm.hidden = false;
+  apiKeyReveal.hidden = true;
   unlockApp();
   if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
-});
+}
 
 function unlockApp() {
   authOverlay.hidden = true;
   appEl.hidden = false;
-  updateSessionStorageHint();
+  updateAccountInfo();
   startPolling();
 }
 
-function updateSessionStorageHint() {
-  const hintEl = document.getElementById('sessionStorageHint');
-  if (!hintEl) return;
-  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
-  hintEl.textContent = remembered
-    ? "You're authenticated with a Tracely key stored in this browser's local storage. It stays signed in until you lock the dashboard or clear site data."
-    : "You're authenticated with a Tracely key stored in sessionStorage. It is cleared when you close this tab.";
+function updateAccountInfo() {
+  if (accountEmailHint && currentUser) {
+    accountEmailHint.textContent = `Signed in as ${currentUser.email}.`;
+  }
+  if (workspaceNameLabel && currentWorkspace) {
+    workspaceNameLabel.textContent = currentWorkspace.name;
+  }
+  if (workspaceKeyLast4El) {
+    workspaceKeyLast4El.textContent = currentWorkspace?.apiKeyLast4
+      ? `····${currentWorkspace.apiKeyLast4}`
+      : '····';
+  }
 }
 
-function lockApp(message) {
-  clearStoredKey();
+async function lockApp(message) {
+  try {
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch {
+    /* Cookie may already be invalid server-side — clearing local state
+       below is what actually locks the UI either way. */
+  }
+  currentUser = null;
+  currentWorkspace = null;
   stopPolling();
   appEl.hidden = true;
   authOverlay.hidden = false;
-  authInput.value = '';
-  rememberMeCheckbox.checked = false;
+  apiKeyReveal.hidden = true;
+  authForm.hidden = false;
+  authForm.reset();
+  setAuthMode('login');
   setAuthLoading(false);
   if (message) showAuthError(message);
 }
@@ -252,15 +339,15 @@ if (streamToggle) {
 }
 
 async function refresh() {
-  if (isPaused) return;
+  if (isPaused || !currentWorkspace) return;
   try {
     const [statsRes, logsRes] = await Promise.all([
-      fetch('/api/stats',     { headers: authHeaders() }),
-      fetch(buildLogsUrl(),   { headers: authHeaders() }),
+      fetch(`/api/stats?workspaceId=${currentWorkspace.id}`, { credentials: 'same-origin' }),
+      fetch(buildLogsUrl(),   { credentials: 'same-origin' }),
     ]);
 
     if (statsRes.status === 401 || logsRes.status === 401) {
-      lockApp('Session expired. Enter your key again.');
+      lockApp('Session expired. Please log in again.');
       return;
     }
 
@@ -291,6 +378,7 @@ async function refresh() {
 // ─────────────────────────────────────────
 function buildLogsUrl() {
   const params = new URLSearchParams();
+  params.set('workspaceId', currentWorkspace.id);
   if (activeFilters.levels.length) params.set('level', activeFilters.levels.join(','));
   if (activeFilters.gameId)        params.set('gameId', activeFilters.gameId);
 
@@ -1178,7 +1266,7 @@ async function resolvePermalink(link) {
   }
 
   try {
-    const res = await fetch(`/api/log-by-id?id=${targetId}`, { headers: authHeaders() });
+    const res = await fetch(`/api/log-by-id?id=${targetId}&workspaceId=${currentWorkspace.id}`, { credentials: 'same-origin' });
     if (!res.ok) {
       lastUpdated.textContent = res.status === 404
         ? 'linked log not found — it may have been cleared or has rolled off retention'
@@ -1590,9 +1678,9 @@ const retentionSelect = document.getElementById('retentionSelect');
 const retentionStatus = document.getElementById('retentionStatus');
 
 async function loadRetentionSetting() {
-  if (!retentionSelect) return;
+  if (!retentionSelect || !currentWorkspace) return;
   try {
-    const res = await fetch('/api/settings', { headers: authHeaders() });
+    const res = await fetch(`/api/settings?workspaceId=${currentWorkspace.id}`, { credentials: 'same-origin' });
     if (!res.ok) return;
     const data = await res.json();
     if (data.logRetentionDays) retentionSelect.value = String(data.logRetentionDays);
@@ -1601,13 +1689,13 @@ async function loadRetentionSetting() {
 
 if (retentionSelect) {
   retentionSelect.addEventListener('change', async () => {
-    const key = getStoredKey();
     if (retentionStatus) retentionStatus.hidden = true;
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tracelyKey: key, logRetentionDays: Number(retentionSelect.value) }),
+        body: JSON.stringify({ workspaceId: currentWorkspace.id, logRetentionDays: Number(retentionSelect.value) }),
       });
       if (!res.ok) throw new Error('save failed');
       if (retentionStatus) {
@@ -1689,11 +1777,11 @@ if (nukeConfirmBtn) {
     nukeConfirmBtn.textContent = 'Clearing…';
 
     try {
-      const key = getStoredKey();
       const res = await fetch('/api/clear-logs', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tracelyKey: key, gameId: gameId || undefined }),
+        body: JSON.stringify({ workspaceId: currentWorkspace.id, gameId: gameId || undefined }),
       });
       if (!res.ok) throw new Error('clear failed');
       closeNukeModal();
@@ -1722,21 +1810,14 @@ document.addEventListener('keydown', (e) => {
   applyDensity(getDensityPref());
   renderRedactionTags();
   applyStreamUI();
+  setAuthMode('login');
 
-  const key = getStoredKey();
-  if (!key) return;
-
-  const { ok, networkError } = await tryUnlock(key);
-  if (ok) {
-    unlockApp();
+  const workspace = await checkExistingSession();
+  if (workspace) {
+    // No user object comes back from /api/workspaces (it's workspace-only),
+    // so the email shown in Settings just won't populate until the next
+    // login — the session itself is still perfectly valid.
+    enterDashboard(workspace);
     loadRetentionSetting();
-    if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
-  } else if (networkError) {
-    // Don't wipe a possibly-valid remembered key just because the first
-    // request on page load happened to fail to reach the server — let
-    // the person retry rather than forcing them to re-enter the key.
-    showAuthError("Couldn't reach the server — check your connection and try again.");
-  } else {
-    clearStoredKey();
   }
 })();

@@ -36,16 +36,17 @@
       <div class="auth-mark">Tracely</div>
       <p class="auth-tagline">High-performance log monitoring for distributed systems</p>
 
-      <p class="auth-sub">Enter your access key to view logs</p>
-      <input id="authInput" type="password" placeholder="Tracely key" autocomplete="off" autofocus />
+      <div class="auth-tabs" role="tablist">
+        <button type="button" class="auth-tab active" data-mode="login" role="tab" aria-selected="true">Log in</button>
+        <button type="button" class="auth-tab" data-mode="signup" role="tab" aria-selected="false">Sign up</button>
+      </div>
 
-      <label class="auth-remember">
-        <input type="checkbox" id="rememberMeCheckbox" />
-        <span>Keep me logged in on this device</span>
-      </label>
+      <input id="authEmail" type="email" placeholder="Email" autocomplete="email" autofocus />
+      <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password" />
+      <input id="authWorkspaceName" type="text" placeholder="Workspace name (optional)" autocomplete="off" hidden />
 
       <button type="submit" id="authSubmitBtn" class="auth-submit-btn">
-        <span class="auth-submit-label">Unlock</span>
+        <span class="auth-submit-label">Log in</span>
         <span class="auth-spinner" hidden aria-hidden="true"></span>
       </button>
 
@@ -55,9 +56,32 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
-        <span>Your key is sent only to your own Tracely API to authenticate requests — never to any third party. "Keep me logged in" stores it in this browser's local storage.</span>
+        <span>Your session is kept in a secure cookie scoped to this site — it isn't readable by other scripts and isn't sent anywhere else.</span>
       </div>
     </form>
+
+    <!-- ── API key reveal (shown once, immediately after signup) ── -->
+    <div id="apiKeyReveal" class="auth-box" hidden>
+      <div class="auth-mark">Workspace created</div>
+      <p class="auth-sub">Save this API key now — it won't be shown again.</p>
+
+      <div class="api-key-box">
+        <code id="apiKeyValue"></code>
+        <button type="button" id="apiKeyCopyBtn" class="btn-ghost btn-sm">Copy</button>
+      </div>
+      <p id="apiKeyCopiedNote" class="api-key-copied-note" hidden>Copied to clipboard.</p>
+
+      <div class="auth-security-note">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span>Paste this into your Roblox script as the <code>tracelyKey</code> value so it can report logs into this workspace. Only its last 4 characters are ever stored — if it's lost, you'll need to create a new workspace.</span>
+      </div>
+
+      <button type="button" id="apiKeyContinueBtn" class="auth-submit-btn">
+        <span>Continue to dashboard</span>
+      </button>
+    </div>
   </div>
 
   <!-- ── App shell ── -->
@@ -238,9 +262,19 @@
           <div class="settings-scroll">
 
             <div class="settings-card">
-              <h2 class="section-title">Session</h2>
-              <p class="settings-hint" id="sessionStorageHint">You're authenticated with a Tracely key stored in this browser.</p>
-              <button id="lockBtn" class="btn-danger">Lock dashboard</button>
+              <h2 class="section-title">Account</h2>
+              <p class="settings-hint" id="accountEmailHint">Signed in.</p>
+              <button id="lockBtn" class="btn-danger">Log out</button>
+            </div>
+
+            <div class="settings-card">
+              <h2 class="section-title">Workspace</h2>
+              <div class="settings-row">
+                <div class="settings-row-text">
+                  <span class="settings-row-label" id="workspaceNameLabel">—</span>
+                  <span class="settings-row-desc">API key ending in <code id="workspaceKeyLast4">····</code> — the full key was shown once at creation and can't be retrieved again. Roblox games use it to post logs into this workspace.</span>
+                </div>
+              </div>
             </div>
 
             <div class="settings-card">

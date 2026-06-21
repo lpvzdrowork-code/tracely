@@ -122,7 +122,8 @@ button, input, select, textarea { font-family: inherit; }
 .auth-sub  { margin: -4px 0 4px; color: var(--text-secondary); font-size: 13px; }
 
 .auth-box input[type="password"],
-.auth-box input[type="text"] {
+.auth-box input[type="text"],
+.auth-box input[type="email"] {
   width: 100%;
   background: var(--bg); border: 1px solid var(--border);
   border-radius: var(--radius-sm); color: var(--text);
@@ -130,23 +131,61 @@ button, input, select, textarea { font-family: inherit; }
   transition: border-color 0.15s var(--ease);
 }
 .auth-box input[type="password"]:hover,
-.auth-box input[type="text"]:hover { border-color: #3a3a3a; }
+.auth-box input[type="text"]:hover,
+.auth-box input[type="email"]:hover { border-color: #3a3a3a; }
 .auth-box input[type="password"]:focus-visible,
-.auth-box input[type="text"]:focus-visible { border-color: var(--info); outline-offset: 0; }
+.auth-box input[type="text"]:focus-visible,
+.auth-box input[type="email"]:focus-visible { border-color: var(--info); outline-offset: 0; }
 
-/* Remember-me row */
-.auth-remember {
-  display: flex; align-items: center; gap: 8px;
-  margin: -4px 0 2px;
-  font-size: 12.5px; color: var(--text-secondary);
-  text-align: left;
-  cursor: pointer;
+/* Login / Sign up tabs */
+.auth-tabs {
+  display: flex; gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin: -2px 0 2px;
 }
-.auth-remember input[type="checkbox"] {
-  width: 14px; height: 14px;
-  accent-color: var(--info);
+.auth-tab {
+  flex: 1;
+  background: transparent; border: none; border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12.5px; font-weight: 600;
+  padding: 7px 0;
   cursor: pointer;
-  flex-shrink: 0;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.auth-tab:hover { color: var(--text); }
+.auth-tab.active { background: var(--surface-raised); color: var(--text); }
+
+/* API key reveal screen */
+.api-key-box {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+}
+.api-key-box code {
+  flex: 1; min-width: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: var(--success);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.api-key-box code::-webkit-scrollbar { display: none; }
+.api-key-copied-note {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--success);
+  text-align: left;
+}
+.auth-security-note code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  padding: 1px 4px;
 }
 
 /* Submit button + loading spinner */
@@ -990,6 +1029,13 @@ button, input, select, textarea { font-family: inherit; }
 .settings-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .settings-row-label { font-size: 13.5px; font-weight: 500; color: var(--text); }
 .settings-row-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.settings-row-desc code {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text);
+}
 
 .settings-status {
   margin: 0; font-size: 12px; color: var(--success);
