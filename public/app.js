@@ -165,16 +165,21 @@ authForm.addEventListener('submit', async (e) => {
         body: JSON.stringify({ email, password, workspaceName: workspaceName || undefined }),
       });
       const data = await res.json().catch(() => ({}));
+      currentUser = data.user || currentUser;
+      if (data.workspace?.apiKey) {
+        // The account and workspace are committed even on a non-ok
+        // response here if signing-in afterward failed server-side — the
+        // key still only exists this once, so show it regardless of
+        // status, then surface the error underneath.
+        showApiKeyReveal(data.workspace);
+        if (!res.ok && data.error) showAuthError(data.error);
+        return;
+      }
       if (!res.ok) {
         showAuthError(data.error || 'Could not create your account.');
         return;
       }
-      currentUser = data.user;
-      if (data.workspace) {
-        // Raw apiKey is only ever present in this one response — show it
-        // before letting the person into the dashboard.
-        showApiKeyReveal(data.workspace);
-      } else {
+      if (!data.workspace) {
         showAuthError(data.warning || 'Account created, but workspace setup failed.');
       }
     } else {

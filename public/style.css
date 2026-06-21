@@ -101,6 +101,7 @@ button, input, select, textarea { font-family: inherit; }
   padding: 24px;
 }
 .auth-overlay[hidden] { display: none; }
+.auth-box[hidden] { display: none; }
 
 .auth-box {
   width: 100%; max-width: 360px;

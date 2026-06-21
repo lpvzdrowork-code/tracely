@@ -36,7 +36,22 @@ export default async function handler(req, res) {
     });
   }
 
-  const token = createSessionToken(user);
+  let token;
+  try {
+    token = createSessionToken(user);
+  } catch (err) {
+    // The user + workspace rows are already committed at this point (see
+    // the workspace try/catch above) — this can only fail on a server
+    // misconfiguration (e.g. SESSION_SECRET unset), not anything the
+    // person did. Surfacing it as JSON (instead of letting it crash the
+    // function with a non-JSON response) at least tells them — and you,
+    // via Vercel's function logs — what actually broke.
+    return res.status(500).json({
+      error: `Account and workspace were created, but signing you in failed: ${err.message}. Check the server's SESSION_SECRET env var, then log in.`,
+      user,
+      workspace,
+    });
+  }
   res.setHeader('Set-Cookie', buildSessionCookie(token, req));
 
   return res.status(201).json({

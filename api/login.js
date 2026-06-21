@@ -20,7 +20,12 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const token = createSessionToken(user);
+  let token;
+  try {
+    token = createSessionToken(user);
+  } catch (err) {
+    return res.status(500).json({ error: `Sign-in failed: ${err.message}` });
+  }
   res.setHeader('Set-Cookie', buildSessionCookie(token, req));
 
   // apiKeyLast4 only — the full key was shown once at workspace creation
