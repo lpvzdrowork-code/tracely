@@ -281,6 +281,7 @@ function buildLogRow(log, animate = false) {
   const row = document.createElement('div');
   row.className = 'log-row' + (animate ? ' new' : '');
   row.dataset.id = log.id;
+  row.dataset.level = log.level;
 
   const time = document.createElement('span');
   time.className = 'log-time';

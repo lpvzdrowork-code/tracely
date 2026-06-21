@@ -702,11 +702,24 @@ button, input, select {
     display: none;
   }
 
-  .log-row {
-    grid-template-columns: 1fr;
-    gap: 4px;
-    padding-right: 16px;
-  }
+ .log-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--row-grid);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 36px 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  border-left: 4px solid transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.1s var(--ease);
+}
+
+.log-row[data-level="INFO"] { border-left-color: var(--info); }
+.log-row[data-level="WARN"] { border-left-color: var(--warn); }
+.log-row[data-level="ERROR"] { border-left-color: var(--error); }
 
   .log-row::after {
     display: none;
