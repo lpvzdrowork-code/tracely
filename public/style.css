@@ -533,6 +533,7 @@ button, input, select {
 .log-feed::-webkit-scrollbar-thumb {
   background: #333333;
   border-radius: 999px;
+  transition: background-color 0.15s var(--ease);
 }
 
 .log-feed::-webkit-scrollbar-thumb:hover {
@@ -565,6 +566,9 @@ button, input, select {
   transition: background-color 0.1s var(--ease);
 }
 
+.log-row.log-row-alt {
+  background: rgba(255, 255, 255, 0.015);
+}
 
 .log-row.new {
   animation: slideIn 0.25s var(--ease) forwards;
