@@ -14,6 +14,7 @@
 </head>
 <body>
 
+  <!-- ── Auth overlay ── -->
   <div id="authOverlay" class="auth-overlay">
     <form id="authForm" class="auth-box">
       <div class="auth-mark">Tracely</div>
@@ -24,67 +25,79 @@
     </form>
   </div>
 
+  <!-- ── App shell ── -->
   <div id="app" class="app" hidden>
-    <header class="topbar">
-      <div class="brand-group">
-        <div class="brand">Tracely</div>
-        <span class="brand-tag">log monitor</span>
+
+    <!-- LEFT: Navigation rail -->
+    <nav class="nav-rail" aria-label="Main navigation">
+      <div class="nav-brand">
+        <span class="nav-brand-mark">T</span>
       </div>
-      <div class="status">
-        <span class="dot" id="liveDot"></span>
-        <span id="lastUpdated">waiting for data…</span>
+
+      <ul class="nav-items" role="list">
+        <li>
+          <button class="nav-item active" data-view="logs" aria-label="Logs" title="Logs">
+            <!-- list icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span class="nav-label">Logs</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" data-view="metrics" aria-label="Metrics" title="Metrics">
+            <!-- bar chart icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <span class="nav-label">Metrics</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item" data-view="settings" aria-label="Settings" title="Settings">
+            <!-- settings icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span class="nav-label">Settings</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="nav-footer">
+        <div class="nav-status">
+          <span class="dot" id="liveDot"></span>
+        </div>
       </div>
-    </header>
+    </nav>
 
-    <main class="main">
-      <div class="layout">
-        <div class="sidebar-col">
-          <aside class="sidebar">
-            <h2 class="section-title">Filters</h2>
+    <!-- CENTER + RIGHT wrapper -->
+    <div class="workspace">
 
-            <div class="filter-group">
-              <span class="filter-label">Level</span>
-              <div class="level-chips">
-                <label class="level-chip" data-level="INFO">
-                  <input type="checkbox" class="level-checkbox" value="INFO" />
-                  <span>Info</span>
-                </label>
-                <label class="level-chip" data-level="WARN">
-                  <input type="checkbox" class="level-checkbox" value="WARN" />
-                  <span>Warn</span>
-                </label>
-                <label class="level-chip" data-level="ERROR">
-                  <input type="checkbox" class="level-checkbox" value="ERROR" />
-                  <span>Error</span>
-                </label>
-              </div>
-            </div>
+      <!-- CENTER: Feed panel -->
+      <div class="feed-panel" id="feedPanel">
 
-            <div class="filter-group">
-              <span class="filter-label">Game ID</span>
-              <input id="gameIdFilter" type="text" placeholder="Any game…" inputmode="numeric" />
-            </div>
-
-            <div class="filter-group">
-              <span class="filter-label">Time range</span>
-              <div class="time-range">
-                <input id="startTimeFilter" type="datetime-local" aria-label="Start time" />
-                <span class="time-sep">to</span>
-                <input id="endTimeFilter" type="datetime-local" aria-label="End time" />
-              </div>
-            </div>
-
-            <div class="filters-divider"></div>
-
-            <div class="filters-actions-row">
-              <button id="applyFilters">Apply</button>
-              <button id="clearFilters" class="ghost">Clear</button>
-            </div>
-          </aside>
+        <!-- Feed topbar -->
+        <div class="feed-topbar">
+          <div class="feed-topbar-left">
+            <h1 class="feed-title">Logs</h1>
+            <span class="feed-live-badge">
+              <span class="dot dot-sm"></span>
+              Live
+            </span>
+          </div>
+          <div class="feed-topbar-right">
+            <span class="feed-updated" id="lastUpdated">waiting…</span>
+          </div>
         </div>
 
-        <div class="content">
-          <section class="stats">
+        <!-- Views -->
+        <div class="view" id="view-logs">
+
+          <!-- Stats row -->
+          <div class="stats-row">
             <div class="stat-card stat-info">
               <span class="stat-label">Info</span>
               <span class="stat-value" id="statInfo">0</span>
@@ -97,16 +110,60 @@
               <span class="stat-label">Error</span>
               <span class="stat-value" id="statError">0</span>
             </div>
-          </section>
+          </div>
 
-          <section class="chart-section">
-            <h2 class="section-title">Activity — last 24 hours</h2>
-            <div class="chart-wrap">
-              <canvas id="activityChart"></canvas>
+          <!-- Search + filter bar -->
+          <div class="search-bar-wrap">
+            <div class="search-input-wrap">
+              <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="Search logs…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <kbd class="search-shortcut" id="searchShortcut">/</kbd>
             </div>
-          </section>
 
-          <section class="log-feed-wrap">
+            <div class="filter-chips">
+              <label class="chip" data-level="INFO">
+                <input type="checkbox" class="level-checkbox" value="INFO" />
+                <span class="chip-dot" style="background:var(--info)"></span>
+                Info
+              </label>
+              <label class="chip" data-level="WARN">
+                <input type="checkbox" class="level-checkbox" value="WARN" />
+                <span class="chip-dot" style="background:var(--warn)"></span>
+                Warn
+              </label>
+              <label class="chip" data-level="ERROR">
+                <input type="checkbox" class="level-checkbox" value="ERROR" />
+                <span class="chip-dot" style="background:var(--error)"></span>
+                Error
+              </label>
+            </div>
+
+            <div class="filter-extras" id="filterExtras">
+              <input id="gameIdFilter" type="text" placeholder="Game ID" inputmode="numeric" class="filter-input" />
+              <input id="startTimeFilter" type="datetime-local" class="filter-input" aria-label="Start time" />
+              <span class="time-sep">–</span>
+              <input id="endTimeFilter" type="datetime-local" class="filter-input" aria-label="End time" />
+              <button id="applyFilters" class="btn-primary btn-sm">Apply</button>
+              <button id="clearFilters" class="btn-ghost btn-sm">Clear</button>
+            </div>
+
+            <button class="btn-ghost btn-sm btn-icon" id="toggleFilters" aria-label="Toggle filters" title="More filters">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Log table -->
+          <div class="log-feed-wrap">
             <div class="log-feed-header">
               <span>Time</span>
               <span>Game ID</span>
@@ -117,11 +174,48 @@
             <div class="log-feed" id="logFeed">
               <p class="empty-state" id="emptyState" hidden>No logs match these filters yet.</p>
             </div>
-          </section>
+          </div>
+
+        </div><!-- /view-logs -->
+
+        <!-- Metrics view -->
+        <div class="view" id="view-metrics" hidden>
+          <div class="chart-section">
+            <h2 class="section-title">Activity — last 24 hours</h2>
+            <div class="chart-wrap">
+              <canvas id="activityChart"></canvas>
+            </div>
+          </div>
         </div>
-      </div>
-    </main>
-  </div>
+
+        <!-- Settings view -->
+        <div class="view" id="view-settings" hidden>
+          <div class="settings-card">
+            <h2 class="section-title">Session</h2>
+            <p class="settings-hint">You're authenticated with a Tracely key stored in sessionStorage. It is cleared when you close the tab.</p>
+            <button id="lockBtn" class="btn-danger">Lock dashboard</button>
+          </div>
+        </div>
+
+      </div><!-- /feed-panel -->
+
+      <!-- RIGHT: Detail drawer -->
+      <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
+        <div class="detail-header">
+          <span class="detail-title">Log details</span>
+          <button class="detail-close" id="detailClose" aria-label="Close details">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="detail-body" id="detailBody">
+          <p class="detail-empty">Select a log row to inspect it.</p>
+        </div>
+      </aside>
+
+    </div><!-- /workspace -->
+  </div><!-- /app -->
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="/app.js"></script>
