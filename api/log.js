@@ -1,4 +1,5 @@
 import { insertLog } from '../lib/db.js';
+import { getWorkspaceByApiKey } from '../lib/auth.js';
 
 const VALID_LEVELS = new Set(['INFO', 'WARN', 'ERROR']);
 
@@ -9,7 +10,11 @@ export default async function handler(req, res) {
 
   const { level, message, timestamp, gameId, tracelyKey } = req.body || {};
 
-  if (tracelyKey !== process.env.TRACELY_KEY) {
+  // tracelyKey is now a per-workspace API key (tracely_live_...) instead of
+  // one secret shared by every Roblox game on the instance. Each game
+  // posts with the key generated for its own workspace.
+  const workspace = await getWorkspaceByApiKey(tracelyKey);
+  if (!workspace) {
     return res.status(401).end();
   }
 
@@ -33,6 +38,7 @@ export default async function handler(req, res) {
     message: message.slice(0, 4000),
     timestamp: numericTimestamp,
     gameId: numericGameId,
+    workspaceId: workspace.id,
   });
 
   if (!result.inserted) {
