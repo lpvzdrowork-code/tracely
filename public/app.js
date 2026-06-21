@@ -32,6 +32,63 @@ const lastUpdated = document.getElementById('lastUpdated');
 // ── Ingestion pulse ──
 const ingestPulseEl = document.getElementById('ingestPulse');
 
+// ─────────────────────────────────────────
+// TOASTS
+//
+// Lightweight success/error notices for actions that complete with no
+// other visible feedback. Settings already has its own inline "Saved."
+// text next to the retention dropdown, so that one's left alone — this is
+// for things like delete/create workspace, which otherwise just... finish,
+// silently, with nothing on screen to confirm it actually happened.
+// ─────────────────────────────────────────
+const toastContainer = document.getElementById('toastContainer');
+
+const TOAST_ICONS = {
+  success: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  error: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+};
+
+function showToast(message, { type = 'success', duration = 3200 } = {}) {
+  if (!toastContainer) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (type === 'error' ? ' toast-error' : '');
+  toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+  const icon = document.createElement('span');
+  icon.className = 'toast-icon';
+  icon.innerHTML = TOAST_ICONS[type] || TOAST_ICONS.success;
+
+  const text = document.createElement('span');
+  text.className = 'toast-message';
+  text.textContent = message;
+
+  const dismissBtn = document.createElement('button');
+  dismissBtn.type = 'button';
+  dismissBtn.className = 'toast-dismiss';
+  dismissBtn.setAttribute('aria-label', 'Dismiss notification');
+  dismissBtn.innerHTML = '&times;';
+
+  toast.append(icon, text, dismissBtn);
+  toastContainer.appendChild(toast);
+
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    toast.classList.add('toast-leaving');
+    // Falls back to an immediate removal if the animationend event never
+    // fires (e.g. prefers-reduced-motion drops the duration to ~0 and the
+    // browser coalesces it away) so a dismissed toast can't get stuck on
+    // screen forever.
+    toast.addEventListener('animationend', () => toast.remove(), { once: true });
+    setTimeout(() => toast.remove(), 250);
+  };
+
+  dismissBtn.addEventListener('click', dismiss);
+  setTimeout(dismiss, duration);
+}
+
 // ── Stats ──
 const statInfoEl  = document.getElementById('statInfo');
 const statWarnEl  = document.getElementById('statWarn');
@@ -135,6 +192,13 @@ function setAuthMode(mode) {
   authPassword.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
   authSubmitLabel.textContent = mode === 'signup' ? 'Sign up' : 'Log in';
   authError.hidden = true;
+
+  // Email is the first field in both modes — the HTML `autofocus` attribute
+  // only fires once on initial page load, so switching tabs afterward (e.g.
+  // someone lands on "Sign up" by mistake and clicks back to "Log in")
+  // left the field unfocused with no way to start typing but clicking it.
+  // Whatever they'd already typed stays put; this only moves the cursor.
+  authEmail?.focus();
 }
 
 authTabs.forEach((tab) => {
@@ -584,7 +648,7 @@ async function createNewWorkspace() {
     return;
   }
 
-  if (wsNewCreateBtn) wsNewCreateBtn.disabled = true;
+  if (wsNewCreateBtn) { wsNewCreateBtn.disabled = true; wsNewCreateBtn.textContent = 'Creating…'; }
   try {
     const res = await fetch('/api/workspaces', {
       method: 'POST',
@@ -608,10 +672,11 @@ async function createNewWorkspace() {
     if (wsNewKeyNote)  wsNewKeyNote.hidden = false;
 
     switchWorkspace(data.workspace.id);
+    showToast(`Workspace "${data.workspace.name}" created`);
   } catch {
     if (wsNewError) { wsNewError.textContent = "Couldn't reach the server — try again."; wsNewError.hidden = false; }
   } finally {
-    if (wsNewCreateBtn) wsNewCreateBtn.disabled = false;
+    if (wsNewCreateBtn) { wsNewCreateBtn.disabled = false; wsNewCreateBtn.textContent = 'Create'; }
   }
 }
 
@@ -2223,6 +2288,7 @@ if (nukeConfirmBtn) {
       knownLogIds.clear();
       closeDrawer();
       refresh();
+      showToast(scope === 'game' ? `Logs cleared for game ${gameId}` : 'All logs cleared');
     } catch {
       nukeModalError.textContent = 'Something went wrong — try again.';
       nukeModalError.hidden = false;
@@ -2300,6 +2366,7 @@ if (deleteWsConfirmBtn) {
       closeDeleteWsModal();
       renderWorkspaceSwitcher();
       renderWorkspacesSettingsList();
+      showToast(`Workspace "${ws.name}" deleted`);
     } catch {
       deleteWsModalError.textContent = "Couldn't reach the server — try again.";
       deleteWsModalError.hidden = false;
