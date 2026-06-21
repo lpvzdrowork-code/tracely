@@ -1,4 +1,4 @@
-import { deleteLogsOlderThan } from '../lib/db.js';
+import { deleteLogsOlderThan, getSettings } from '../lib/db.js';
 
 // Triggered daily by Vercel Cron (see vercel.json). Vercel automatically sends
 // `Authorization: Bearer <CRON_SECRET>` on cron-triggered requests once you've
@@ -12,7 +12,12 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const retentionDays = Number(process.env.LOG_RETENTION_DAYS) || 30;
+  // The dashboard's Settings panel writes logRetentionDays into the
+  // settings table; that takes priority over the env var so changes from
+  // the UI don't require a redeploy. LOG_RETENTION_DAYS stays as the
+  // fallback for anyone who hasn't touched the setting yet.
+  const settings = await getSettings();
+  const retentionDays = settings.logRetentionDays || Number(process.env.LOG_RETENTION_DAYS) || 30;
   const deleted = await deleteLogsOlderThan(retentionDays);
 
   return res.status(200).json({ deleted, retentionDays });

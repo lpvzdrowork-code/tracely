@@ -790,7 +790,7 @@ function buildLogRow(log, animate = false) {
 
   const msg = document.createElement('span');
   msg.className   = 'log-message';
-  msg.textContent = log.message;
+  renderRedactedInto(msg, log.message);
   msgWrap.appendChild(msg);
 
   if (log.count > 1) {
@@ -850,14 +850,14 @@ function openDrawer(log) {
   const sec2 = makeDetailSection('Message');
   const msgBlock = document.createElement('pre');
   msgBlock.className   = 'detail-message-block';
-  msgBlock.textContent = log.message;
+  renderRedactedInto(msgBlock, log.message);
   sec2.appendChild(msgBlock);
 
   const copyBtn = document.createElement('button');
   copyBtn.className   = 'detail-copy-btn';
   copyBtn.textContent = 'Copy message';
   copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(log.message).then(() => {
+    navigator.clipboard.writeText(redactText(log.message)).then(() => {
       copyBtn.textContent = 'Copied!';
       copyBtn.classList.add('copied');
       setTimeout(() => { copyBtn.textContent = 'Copy message'; copyBtn.classList.remove('copied'); }, 1800);
@@ -873,7 +873,7 @@ function openDrawer(log) {
   jsonBlock.textContent = JSON.stringify({
     id:        log.id,
     level:     log.level,
-    message:   log.message,
+    message:   redactText(log.message),
     timestamp: log.timestamp,
     gameId:    log.gameId,
     count:     log.count ?? 1,
@@ -1027,12 +1027,356 @@ if (toggleFiltersBtn) {
 }
 
 // ─────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────
+const THEME_KEY = 'tracelyTheme';
+const themeSegmented = document.getElementById('themeSegmented');
+const lightMediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+
+function resolveTheme(pref) {
+  return pref === 'system' ? (lightMediaQuery.matches ? 'light' : 'dark') : pref;
+}
+
+function applyTheme(pref) {
+  document.documentElement.classList.toggle('theme-light', resolveTheme(pref) === 'light');
+  if (themeSegmented) {
+    themeSegmented.querySelectorAll('.segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.value === pref);
+    });
+  }
+}
+
+function getThemePref() {
+  return localStorage.getItem(THEME_KEY) || 'system';
+}
+
+function setThemePref(pref) {
+  localStorage.setItem(THEME_KEY, pref);
+  applyTheme(pref);
+}
+
+if (themeSegmented) {
+  themeSegmented.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segmented-btn');
+    if (btn) setThemePref(btn.dataset.value);
+  });
+}
+
+// Keep in sync if the OS theme changes while "System" is selected
+lightMediaQuery.addEventListener('change', () => {
+  if (getThemePref() === 'system') applyTheme('system');
+});
+
+// ─────────────────────────────────────────
+// DENSITY
+// ─────────────────────────────────────────
+const DENSITY_KEY = 'tracelyDensity';
+const densitySegmented = document.getElementById('densitySegmented');
+
+function applyDensity(pref) {
+  document.documentElement.classList.toggle('density-compact', pref === 'compact');
+  if (densitySegmented) {
+    densitySegmented.querySelectorAll('.segmented-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.value === pref);
+    });
+  }
+}
+
+function getDensityPref() {
+  return localStorage.getItem(DENSITY_KEY) || 'cozy';
+}
+
+function setDensityPref(pref) {
+  localStorage.setItem(DENSITY_KEY, pref);
+  applyDensity(pref);
+}
+
+if (densitySegmented) {
+  densitySegmented.addEventListener('click', (e) => {
+    const btn = e.target.closest('.segmented-btn');
+    if (btn) setDensityPref(btn.dataset.value);
+  });
+}
+
+// ─────────────────────────────────────────
+// REDACTION RULES
+// Stored per-browser in localStorage. Applied at display time only —
+// the underlying log data (search, raw JSON copy target) is untouched,
+// so adding a rule retroactively masks old logs too without needing a
+// server round trip.
+// ─────────────────────────────────────────
+const REDACTION_KEY = 'tracelyRedactionTerms';
+const redactionInput = document.getElementById('redactionInput');
+const redactionAddBtn = document.getElementById('redactionAddBtn');
+const redactionTagsEl = document.getElementById('redactionTags');
+
+function getRedactionTerms() {
+  try {
+    const raw = localStorage.getItem(REDACTION_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function setRedactionTerms(terms) {
+  localStorage.setItem(REDACTION_KEY, JSON.stringify(terms));
+  renderRedactionTags();
+  // updateLogRow() (used by the normal poll diff) never touches
+  // .log-message, so a plain refresh() wouldn't re-mask rows already on
+  // screen. Clear the known-IDs cache first to force renderLogs() to treat
+  // every visible row as new and rebuild it with the updated rules.
+  knownLogIds.clear();
+  logFeedEl.innerHTML = '';
+  refresh();
+  if (selectedLogId !== null) {
+    // Drawer holds its own log reference; close it so stale unredacted
+    // text doesn't linger until the next click re-applies redaction.
+    closeDrawer();
+  }
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Returns the message with every redaction term replaced by bullet
+ * characters of the same length (so leak-by-length-guessing is at least
+ * a little harder than a fixed-width mask, and copy-paste output doesn't
+ * literally contain the word "REDACTED" next to a key value).
+ */
+function redactText(message) {
+  const terms = getRedactionTerms().filter(Boolean);
+  if (!terms.length || typeof message !== 'string') return message;
+  let out = message;
+  for (const term of terms) {
+    const re = new RegExp(escapeRegExp(term), 'gi');
+    out = out.replace(re, (match) => '•'.repeat(match.length));
+  }
+  return out;
+}
+
+/**
+ * Renders `message` into `el` with matched redaction terms wrapped in a
+ * highlighted span, so it's visually obvious something was hidden (vs.
+ * silently rewriting text in a way that looks like normal content).
+ */
+function renderRedactedInto(el, message) {
+  el.innerHTML = '';
+  const terms = getRedactionTerms().filter(Boolean);
+  if (!terms.length || typeof message !== 'string') {
+    el.textContent = message;
+    return;
+  }
+  const re = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi');
+  const parts = message.split(re);
+  for (const part of parts) {
+    if (terms.some((t) => t.toLowerCase() === part.toLowerCase())) {
+      const mark = document.createElement('span');
+      mark.className = 'redacted-mask';
+      mark.textContent = '•'.repeat(part.length);
+      mark.title = 'Redacted by your local rules';
+      el.appendChild(mark);
+    } else if (part) {
+      el.appendChild(document.createTextNode(part));
+    }
+  }
+}
+
+function renderRedactionTags() {
+  if (!redactionTagsEl) return;
+  const terms = getRedactionTerms();
+  redactionTagsEl.innerHTML = '';
+
+  if (!terms.length) {
+    const hint = document.createElement('span');
+    hint.className = 'redaction-empty-hint';
+    hint.textContent = 'No redaction rules yet.';
+    redactionTagsEl.appendChild(hint);
+    return;
+  }
+
+  terms.forEach((term, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'redaction-tag';
+    const label = document.createElement('span');
+    label.textContent = term;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'redaction-tag-remove';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', `Remove redaction rule "${term}"`);
+    removeBtn.addEventListener('click', () => {
+      const next = getRedactionTerms();
+      next.splice(i, 1);
+      setRedactionTerms(next);
+    });
+    tag.append(label, removeBtn);
+    redactionTagsEl.appendChild(tag);
+  });
+}
+
+function addRedactionTerm() {
+  if (!redactionInput) return;
+  const val = redactionInput.value.trim();
+  if (!val) return;
+  const terms = getRedactionTerms();
+  if (!terms.some((t) => t.toLowerCase() === val.toLowerCase())) {
+    terms.push(val);
+    setRedactionTerms(terms);
+  }
+  redactionInput.value = '';
+  redactionInput.focus();
+}
+
+if (redactionAddBtn) redactionAddBtn.addEventListener('click', addRedactionTerm);
+if (redactionInput) {
+  redactionInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addRedactionTerm(); }
+  });
+}
+
+// ─────────────────────────────────────────
+// DATA RETENTION
+// ─────────────────────────────────────────
+const retentionSelect = document.getElementById('retentionSelect');
+const retentionStatus = document.getElementById('retentionStatus');
+
+async function loadRetentionSetting() {
+  if (!retentionSelect) return;
+  try {
+    const res = await fetch('/api/settings', { headers: authHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.logRetentionDays) retentionSelect.value = String(data.logRetentionDays);
+  } catch { /* leave default selected */ }
+}
+
+if (retentionSelect) {
+  retentionSelect.addEventListener('change', async () => {
+    const key = sessionStorage.getItem(STORAGE_KEY);
+    if (retentionStatus) retentionStatus.hidden = true;
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracelyKey: key, logRetentionDays: Number(retentionSelect.value) }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      if (retentionStatus) {
+        retentionStatus.textContent = 'Saved.';
+        retentionStatus.hidden = false;
+        setTimeout(() => { retentionStatus.hidden = true; }, 2200);
+      }
+    } catch {
+      if (retentionStatus) {
+        retentionStatus.textContent = 'Could not save — try again.';
+        retentionStatus.style.color = 'var(--error)';
+        retentionStatus.hidden = false;
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────
+// NUKE (clear logs)
+// ─────────────────────────────────────────
+const nukeBtn = document.getElementById('nukeBtn');
+const nukeModalOverlay = document.getElementById('nukeModalOverlay');
+const nukeCancelBtn = document.getElementById('nukeCancelBtn');
+const nukeConfirmBtn = document.getElementById('nukeConfirmBtn');
+const nukeConfirmCheckbox = document.getElementById('nukeConfirmCheckbox');
+const nukeGameIdInput = document.getElementById('nukeGameIdInput');
+const nukeModalError = document.getElementById('nukeModalError');
+const nukeScopeRadios = document.querySelectorAll('input[name="nukeScope"]');
+
+function openNukeModal() {
+  if (!nukeModalOverlay) return;
+  nukeConfirmCheckbox.checked = false;
+  nukeConfirmBtn.disabled = true;
+  nukeGameIdInput.value = '';
+  nukeGameIdInput.disabled = true;
+  nukeModalError.hidden = true;
+  document.querySelector('input[name="nukeScope"][value="all"]').checked = true;
+  nukeModalOverlay.hidden = false;
+}
+
+function closeNukeModal() {
+  if (nukeModalOverlay) nukeModalOverlay.hidden = true;
+}
+
+if (nukeBtn) nukeBtn.addEventListener('click', openNukeModal);
+if (nukeCancelBtn) nukeCancelBtn.addEventListener('click', closeNukeModal);
+if (nukeModalOverlay) {
+  nukeModalOverlay.addEventListener('click', (e) => {
+    if (e.target === nukeModalOverlay) closeNukeModal();
+  });
+}
+
+nukeScopeRadios.forEach((r) => {
+  r.addEventListener('change', () => {
+    const isGame = document.querySelector('input[name="nukeScope"]:checked')?.value === 'game';
+    nukeGameIdInput.disabled = !isGame;
+    if (isGame) nukeGameIdInput.focus();
+  });
+});
+
+if (nukeConfirmCheckbox) {
+  nukeConfirmCheckbox.addEventListener('change', () => {
+    nukeConfirmBtn.disabled = !nukeConfirmCheckbox.checked;
+  });
+}
+
+if (nukeConfirmBtn) {
+  nukeConfirmBtn.addEventListener('click', async () => {
+    const scope = document.querySelector('input[name="nukeScope"]:checked')?.value;
+    const gameId = scope === 'game' ? nukeGameIdInput.value.trim() : '';
+
+    if (scope === 'game' && (!gameId || !/^\d+$/.test(gameId))) {
+      nukeModalError.textContent = 'Enter a valid numeric game ID.';
+      nukeModalError.hidden = false;
+      return;
+    }
+
+    nukeConfirmBtn.disabled = true;
+    nukeConfirmBtn.textContent = 'Clearing…';
+
+    try {
+      const key = sessionStorage.getItem(STORAGE_KEY);
+      const res = await fetch('/api/clear-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracelyKey: key, gameId: gameId || undefined }),
+      });
+      if (!res.ok) throw new Error('clear failed');
+      closeNukeModal();
+      knownLogIds.clear();
+      closeDrawer();
+      refresh();
+    } catch {
+      nukeModalError.textContent = 'Something went wrong — try again.';
+      nukeModalError.hidden = false;
+    } finally {
+      nukeConfirmBtn.disabled = !nukeConfirmCheckbox.checked;
+      nukeConfirmBtn.textContent = 'Clear logs';
+    }
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && nukeModalOverlay && !nukeModalOverlay.hidden) closeNukeModal();
+});
+
+// ─────────────────────────────────────────
 // Init
 // ─────────────────────────────────────────
 (async function init() {
+  applyTheme(getThemePref());
+  applyDensity(getDensityPref());
+  renderRedactionTags();
+
   const key = sessionStorage.getItem(STORAGE_KEY);
   if (!key) return;
   const ok = await tryUnlock(key);
-  if (ok) { unlockApp(); }
+  if (ok) { unlockApp(); loadRetentionSetting(); }
   else    { sessionStorage.removeItem(STORAGE_KEY); }
 })();

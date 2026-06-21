@@ -30,6 +30,32 @@
 
   /* log row columns */
   --row-grid:        88px 108px 72px 1fr;
+  --row-pad-y:        9px;
+  --row-font-size:   12.5px;
+}
+
+/* ── Light theme override ──
+   Toggled via .theme-light on <html>, set by the inline init script in
+   index.html and kept in sync by applyTheme() in app.js. Only repaints
+   the base palette — accent colors (info/warn/error/success) stay put so
+   level badges and charts read the same in both themes. */
+html.theme-light {
+  --bg:              #f7f7f8;
+  --surface:         #ffffff;
+  --surface-raised:  #ffffff;
+  --surface-hover:   #f0f0f2;
+  --border:          #e2e2e6;
+  --border-soft:     #ececef;
+  --text:            #161618;
+  --text-secondary:  #6b6b72;
+  --text-dim:        #9a9aa1;
+}
+
+/* ── Density override ──
+   Toggled via .density-compact on <html>. */
+html.density-compact {
+  --row-pad-y:      4px;
+  --row-font-size:  11.5px;
 }
 
 /* ── Reset ── */
@@ -458,13 +484,13 @@ button, input, select, textarea { font-family: inherit; }
   grid-template-columns: var(--row-grid);
   gap: 12px;
   align-items: center;
-  padding: 9px 16px;
+  padding: var(--row-pad-y) 16px;
   border-bottom: 1px solid var(--border-soft);
   border-left: 3px solid transparent;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12.5px;
+  font-size: var(--row-font-size);
   cursor: pointer;
-  transition: background 0.08s var(--ease);
+  transition: background 0.08s var(--ease), padding 0.12s var(--ease);
 }
 .log-row.log-row-alt { background: rgba(255,255,255,0.012); }
 .log-row.new         { animation: slideIn 0.22s var(--ease) forwards; }
@@ -816,16 +842,156 @@ button, input, select, textarea { font-family: inherit; }
 /* ─────────────────────────────────────────
    SETTINGS VIEW
 ───────────────────────────────────────── */
+.settings-scroll {
+  flex: 1; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #303030 transparent;
+}
 .settings-card {
-  margin: 20px;
+  margin: 20px 20px 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
   display: flex; flex-direction: column; gap: 14px;
-  max-width: 460px;
+  max-width: 540px;
 }
+.settings-scroll .settings-card:last-child { margin-bottom: 20px; }
 .settings-hint { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+.settings-card-danger { border-color: rgba(220,38,38,0.25); }
+
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px;
+}
+.settings-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.settings-row-label { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.settings-row-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+.settings-status {
+  margin: 0; font-size: 12px; color: var(--success);
+}
+
+.settings-select {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  padding: 7px 10px; font-size: 13px; cursor: pointer;
+  transition: border-color 0.12s var(--ease);
+  flex-shrink: 0;
+}
+.settings-select:hover { border-color: #3a3a3a; }
+.settings-select:focus-visible { border-color: var(--info); }
+
+/* Segmented control (theme / density) */
+.segmented {
+  display: inline-flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  flex-shrink: 0;
+}
+.segmented-btn {
+  background: transparent; border: none;
+  color: var(--text-secondary);
+  font-size: 12.5px; font-weight: 500;
+  padding: 6px 12px; border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.segmented-btn:hover { color: var(--text); }
+.segmented-btn.active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+html.theme-light .segmented-btn.active {
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+/* Redaction rules */
+.redaction-input-row { display: flex; gap: 8px; }
+.redaction-input-row .filter-input { flex: 1; }
+.redaction-tags {
+  display: flex; flex-wrap: wrap; gap: 7px;
+}
+.redaction-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 999px;
+  padding: 4px 6px 4px 11px;
+  font-size: 12px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+}
+.redaction-tag-remove {
+  background: transparent; border: none;
+  color: var(--text-dim); cursor: pointer;
+  padding: 2px 6px; line-height: 1; font-size: 13px;
+  border-radius: 999px;
+  transition: color 0.1s, background 0.1s;
+}
+.redaction-tag-remove:hover { color: var(--error); background: rgba(239,68,68,0.12); }
+.redaction-empty-hint { font-size: 12px; color: var(--text-dim); }
+
+/* Redacted text inline in logs/drawer */
+.redacted-mask {
+  background: rgba(245,158,11,0.16);
+  color: var(--warn);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────
+   MODAL (nuke confirmation)
+───────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+.modal-overlay[hidden] { display: none; }
+
+.modal-box {
+  width: 100%; max-width: 380px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.7);
+}
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-text { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+.modal-scope {
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+.modal-radio {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+.modal-game-input { margin-top: 2px; }
+.modal-game-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.modal-confirm-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-secondary); cursor: pointer;
+}
+
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 4px;
+}
+.modal-error { margin: 0; font-size: 12px; color: var(--error); }
 
 /* ─────────────────────────────────────────
    RESPONSIVE
@@ -848,4 +1014,9 @@ button, input, select, textarea { font-family: inherit; }
   .detail-drawer.open {
     position: fixed; inset: 0; z-index: 30; width: 100vw;
   }
+
+  .settings-row {
+    flex-direction: column; align-items: flex-start; gap: 10px;
+  }
+  .settings-card { margin-left: 12px; margin-right: 12px; }
 }
