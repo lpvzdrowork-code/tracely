@@ -56,8 +56,13 @@ const lockBtn = document.getElementById('lockBtn');
 let chart          = null;
 let refreshTimer   = null;
 let knownLogIds    = new Set();
+let logDataById     = new Map(); // id -> raw log object from the API, refreshed every poll
 let selectedLogId  = null;
 let searchDebounce = null;
+let isPaused       = false;
+let kbFocusedId    = null;
+let pendingPermalink = null; // { gameId, logId, after, before } parsed from URL on load, consumed once
+let pendingUrlPermalink = null; // set just below, once parsePermalinkFromUrl() is defined and DOM is ready
 
 let activeFilters = {
   search: '',
@@ -93,6 +98,7 @@ authForm.addEventListener('submit', async (e) => {
   if (!ok) { authError.hidden = false; return; }
   sessionStorage.setItem(STORAGE_KEY, key);
   unlockApp();
+  if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
 });
 
 function unlockApp() {
@@ -132,10 +138,15 @@ navItems.forEach((btn) => {
 // ─────────────────────────────────────────
 // Polling
 // ─────────────────────────────────────────
+const streamToggle = document.getElementById('streamToggle');
+const streamDot    = document.getElementById('streamDot');
+const streamLabel  = document.getElementById('streamLabel');
+const navLiveDot   = document.getElementById('liveDot');
+
 function startPolling() {
   refresh();
   stopPolling();
-  refreshTimer = setInterval(refresh, REFRESH_MS);
+  if (!isPaused) refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
 function stopPolling() {
@@ -143,7 +154,30 @@ function stopPolling() {
   refreshTimer = null;
 }
 
+function applyStreamUI() {
+  if (streamToggle) streamToggle.classList.toggle('paused', isPaused);
+  if (streamLabel)  streamLabel.textContent = isPaused ? 'Paused' : 'Live';
+  if (streamDot)    streamDot.classList.toggle('dot-paused', isPaused);
+  if (navLiveDot)   navLiveDot.classList.toggle('dot-paused', isPaused);
+}
+
+function setPaused(paused) {
+  isPaused = paused;
+  applyStreamUI();
+  if (isPaused) {
+    stopPolling();
+    lastUpdated.textContent = `paused at ${new Date().toLocaleTimeString()}`;
+  } else {
+    startPolling();
+  }
+}
+
+if (streamToggle) {
+  streamToggle.addEventListener('click', () => setPaused(!isPaused));
+}
+
 async function refresh() {
+  if (isPaused) return;
   try {
     const [statsRes, logsRes] = await Promise.all([
       fetch('/api/stats',     { headers: authHeaders() }),
@@ -163,6 +197,15 @@ async function refresh() {
     renderLogs(logsData.logs, logsData.total);
 
     lastUpdated.textContent = `updated ${new Date().toLocaleTimeString()}`;
+
+    // A pending permalink (from a shared URL) is resolved against the
+    // first successful refresh, then cleared so later polls don't keep
+    // re-triggering the scroll/highlight.
+    if (pendingPermalink) {
+      const target = pendingPermalink;
+      pendingPermalink = null;
+      resolvePermalink(target);
+    }
   } catch {
     lastUpdated.textContent = 'connection lost — retrying…';
   }
@@ -729,6 +772,16 @@ function renderLogs(logs, total) {
   const newIds    = new Set(logsById.keys());
   const firstLoad = knownLogIds.size === 0;
 
+  for (const [id, log] of logsById) logDataById.set(id, log);
+  // Cap the cache so a long-running tab doesn't accumulate unbounded
+  // entries; rows that scroll off-screen and out of the cache just fall
+  // back to the by-id API fetch if a permalink targets them later.
+  if (logDataById.size > 500) {
+    const excess = logDataById.size - 500;
+    const oldestKeys = [...logDataById.keys()].slice(0, excess);
+    for (const k of oldestKeys) logDataById.delete(k);
+  }
+
   [...logFeedEl.querySelectorAll('.log-row')].forEach((row) => {
     const id = Number(row.dataset.id);
     if (!newIds.has(id)) { row.remove(); }
@@ -758,12 +811,13 @@ function updateLogRow(row, log) {
     if (!countEl) {
       countEl = document.createElement('span');
       countEl.className = 'log-count';
-      row.querySelector('.log-message-wrap')?.appendChild(countEl);
+      row.querySelector('.log-message-wrap')?.insertBefore(countEl, row.querySelector('.log-link-btn'));
     }
     countEl.textContent = `×${log.count}`;
   } else if (countEl) { countEl.remove(); }
 
   row.classList.toggle('selected', log.id === selectedLogId);
+  row.classList.toggle('kb-focused', log.id === kbFocusedId);
 }
 
 function buildLogRow(log, animate = false) {
@@ -772,6 +826,7 @@ function buildLogRow(log, animate = false) {
   row.dataset.id    = log.id;
   row.dataset.level = log.level;
   if (log.id === selectedLogId) row.classList.add('selected');
+  if (log.id === kbFocusedId)   row.classList.add('kb-focused');
 
   const time = document.createElement('span');
   time.className   = 'log-time';
@@ -800,9 +855,63 @@ function buildLogRow(log, animate = false) {
     msgWrap.appendChild(cnt);
   }
 
+  msgWrap.appendChild(buildLinkButton(log));
+
   row.append(time, game, badge, msgWrap);
   row.addEventListener('click', () => openDrawer(log));
   return row;
+}
+
+/**
+ * Small "copy permalink" icon button. Builds a URL encoding the current
+ * filter context (gameId + time range) plus this specific log's id, so a
+ * teammate opening the link lands on the same row even if it's since
+ * scrolled off the default page.
+ */
+function buildLinkButton(log) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'log-link-btn';
+  btn.title = 'Copy link to this log';
+  btn.setAttribute('aria-label', 'Copy link to this log');
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation(); // don't also trigger the row's open-drawer click
+    copyPermalink(log, btn);
+  });
+  return btn;
+}
+
+function copyPermalink(log, btn) {
+  const url = buildPermalinkUrl(log);
+  navigator.clipboard.writeText(url).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+    }, 1500);
+  });
+}
+
+/**
+ * Builds a shareable URL for one log entry. Includes the current active
+ * time-range filters (so the teammate's view is scoped similarly) plus
+ * this row's gameId and id, which together are enough for resolvePermalink()
+ * to find — or specifically fetch — the exact row on the other end.
+ */
+function buildPermalinkUrl(log) {
+  const params = new URLSearchParams();
+  params.set('gameId', String(log.gameId));
+  params.set('logId', String(log.id));
+  if (activeFilters.startTimeRelative) params.set('after', activeFilters.startTimeRelative);
+  else if (activeFilters.startTime)    params.set('after', activeFilters.startTime);
+  if (activeFilters.endTimeRelative)   params.set('before', activeFilters.endTimeRelative);
+  else if (activeFilters.endTime)      params.set('before', activeFilters.endTime);
+
+  const url = new URL(window.location.href);
+  url.search = params.toString();
+  return url.toString();
 }
 
 function formatTime(ts) {
@@ -814,9 +923,11 @@ function formatTime(ts) {
 // ─────────────────────────────────────────
 function openDrawer(log) {
   selectedLogId = log.id;
+  kbFocusedId   = log.id;
 
   document.querySelectorAll('.log-row').forEach((r) => {
     r.classList.toggle('selected', Number(r.dataset.id) === log.id);
+    r.classList.toggle('kb-focused', Number(r.dataset.id) === log.id);
   });
 
   detailBody.innerHTML = '';
@@ -903,23 +1014,127 @@ function openDrawer(log) {
  * If that key already exists, replaces its value; otherwise appends.
  */
 function injectQueryToken(tokenStr) {
-  const [k, v] = tokenStr.split(':');
-  const canonical = TOKEN_ALIASES[k.toLowerCase()];
-  if (!canonical) return;
+  injectQueryTokens([tokenStr]);
+}
 
+/**
+ * Same as injectQueryToken but applies several tokens in one pass, so
+ * callers setting multiple filters at once (e.g. resolving a permalink)
+ * only trigger a single refresh() instead of one per token.
+ */
+function injectQueryTokens(tokenStrs) {
   let current = searchInput.value;
 
-  // Remove any existing token with same canonical key
-  for (const alias of Object.entries(TOKEN_ALIASES).filter(([,c]) => c === canonical).map(([a]) => a)) {
-    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(?:^|\\s)${escaped}:(?:"[^"]*"|'[^']*'|\\S+)`, 'gi');
-    current = current.replace(re, ' ');
+  for (const tokenStr of tokenStrs) {
+    const [k] = tokenStr.split(':');
+    const canonical = TOKEN_ALIASES[k.toLowerCase()];
+    if (!canonical) continue;
+
+    for (const alias of Object.entries(TOKEN_ALIASES).filter(([, c]) => c === canonical).map(([a]) => a)) {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(?:^|\\s)${escaped}:(?:"[^"]*"|'[^']*'|\\S+)`, 'gi');
+      current = current.replace(re, ' ');
+    }
+    current = (current.trim() + ' ' + tokenStr).trim().replace(/\s{2,}/g, ' ');
   }
 
-  current = (current.trim() + ' ' + tokenStr).trim().replace(/\s{2,}/g, ' ');
   searchInput.value = current;
-  const parsed = parseQuery(current);
-  applyParsedQuery(parsed);
+  applyParsedQuery(parseQuery(current));
+}
+
+// ─────────────────────────────────────────
+// PERMALINKS
+//
+// A permalink URL looks like:
+//   ?gameId=123456&logId=4821&after=3h&before=...
+// gameId/logId are required to identify the row; after/before are
+// optional context carried over from whoever copied the link, so the
+// recipient's view is scoped similarly (not strictly required to find
+// the log — id: alone would do that — but it keeps the surrounding
+// feed relevant rather than dumping them into an unfiltered view).
+// ─────────────────────────────────────────
+
+/** Parses location.search into a pendingPermalink object, or null if absent/invalid. */
+function parsePermalinkFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const gameId = params.get('gameId');
+  const logId  = params.get('logId');
+  if (!gameId || !logId || !/^\d+$/.test(gameId) || !/^\d+$/.test(logId)) return null;
+
+  return {
+    gameId,
+    logId,
+    after:  params.get('after')  || '',
+    before: params.get('before') || '',
+  };
+}
+
+// Parsed once at script load — both the auto-unlock path (already has a
+// session key) and the manual-login path (auth form submit) read from
+// this same value, so a permalink survives the auth gate either way.
+pendingUrlPermalink = parsePermalinkFromUrl();
+
+/**
+ * Applies a permalink's filters to the search bar (so the surrounding feed
+ * matches what was shared) and queues the target log id to be resolved
+ * once the first refresh() completes.
+ */
+function primePermalink(link) {
+  const tokens = [`game:${link.gameId}`];
+  if (link.after)  tokens.push(`after:${link.after}`);
+  if (link.before) tokens.push(`before:${link.before}`);
+  injectQueryTokens(tokens);
+  pendingPermalink = link;
+}
+
+/**
+ * Called once after the first refresh() following a permalink load.
+ * If the target log is already in the rendered feed, scroll + highlight it.
+ * Otherwise fall back to fetching it directly by id, since it may be
+ * outside the current page/time-range window.
+ */
+async function resolvePermalink(link) {
+  const targetId = Number(link.logId);
+  const existingRow = logFeedEl.querySelector(`.log-row[data-id="${targetId}"]`);
+
+  if (existingRow) {
+    highlightPermalinkRow(existingRow, targetId);
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/log-by-id?id=${targetId}`, { headers: authHeaders() });
+    if (!res.ok) {
+      lastUpdated.textContent = res.status === 404
+        ? 'linked log not found — it may have been cleared or has rolled off retention'
+        : lastUpdated.textContent;
+      return;
+    }
+    const { log } = await res.json();
+    if (!log) return;
+
+    logDataById.set(log.id, log);
+    kbFocusedId = log.id;
+    openDrawer(log);
+    // The log lives outside the currently filtered page, so there's no
+    // row to scroll to in the feed — the drawer alone carries it. A small
+    // status note explains why the feed itself doesn't show a highlighted row.
+    lastUpdated.textContent = `opened linked log #${log.id} (outside current filter window)`;
+  } catch {
+    /* leave the feed as-is; nothing to resolve */
+  }
+}
+
+function highlightPermalinkRow(row, targetId) {
+  row.scrollIntoView({ block: 'center' });
+  row.classList.add('permalink-highlight');
+  setTimeout(() => row.classList.remove('permalink-highlight'), 1900);
+
+  kbFocusedId = targetId;
+  syncKbFocusClass();
+
+  const log = logDataById.get(targetId);
+  if (log) openDrawer(log);
 }
 
 function closeDrawer() {
@@ -960,16 +1175,74 @@ function makeDivider() {
 
 detailClose.addEventListener('click', closeDrawer);
 
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && detailDrawer.classList.contains('open')) {
     closeDrawer();
   }
-  if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+  if (e.key === '/' && !isTypingTarget(document.activeElement)) {
     e.preventDefault();
     searchInput.focus();
     searchInput.select();
   }
+
+  if (isTypingTarget(document.activeElement)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  if (e.key === 'j' || e.key === 'k') {
+    e.preventDefault();
+    moveKbFocus(e.key === 'j' ? 1 : -1);
+  } else if (e.key === 'Enter' && kbFocusedId !== null) {
+    e.preventDefault();
+    const log = logDataById.get(kbFocusedId);
+    if (log) openDrawer(log);
+  }
 });
+
+/** Visible rows top-to-bottom, newest first — matches what the user sees. */
+function getVisibleRows() {
+  return [...logFeedEl.querySelectorAll('.log-row')];
+}
+
+function syncKbFocusClass() {
+  getVisibleRows().forEach((row) => {
+    row.classList.toggle('kb-focused', Number(row.dataset.id) === kbFocusedId);
+  });
+}
+
+/**
+ * Moves keyboard focus by `dir` (+1 = j/down, -1 = k/up) through the
+ * currently rendered rows. If nothing is focused yet, starts at the top.
+ * If the detail drawer is already open, the newly focused log is opened
+ * live so the drawer tracks navigation instead of needing a separate
+ * Enter press each time.
+ */
+function moveKbFocus(dir) {
+  const rows = getVisibleRows();
+  if (!rows.length) return;
+
+  let idx = rows.findIndex((r) => Number(r.dataset.id) === kbFocusedId);
+  if (idx === -1) {
+    idx = dir > 0 ? 0 : rows.length - 1;
+  } else {
+    idx = Math.min(Math.max(idx + dir, 0), rows.length - 1);
+  }
+
+  const row = rows[idx];
+  kbFocusedId = Number(row.dataset.id);
+  syncKbFocusClass();
+  row.scrollIntoView({ block: 'nearest' });
+
+  if (detailDrawer.classList.contains('open')) {
+    const log = logDataById.get(kbFocusedId);
+    if (log) openDrawer(log);
+  }
+}
 
 // ─────────────────────────────────────────
 // Legacy checkbox / extras UI (still works,
@@ -1373,10 +1646,16 @@ document.addEventListener('keydown', (e) => {
   applyTheme(getThemePref());
   applyDensity(getDensityPref());
   renderRedactionTags();
+  applyStreamUI();
 
   const key = sessionStorage.getItem(STORAGE_KEY);
   if (!key) return;
   const ok = await tryUnlock(key);
-  if (ok) { unlockApp(); loadRetentionSetting(); }
-  else    { sessionStorage.removeItem(STORAGE_KEY); }
+  if (ok) {
+    unlockApp();
+    loadRetentionSetting();
+    if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
+  } else {
+    sessionStorage.removeItem(STORAGE_KEY);
+  }
 })();

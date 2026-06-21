@@ -99,10 +99,10 @@
         <div class="feed-topbar">
           <div class="feed-topbar-left">
             <h1 class="feed-title">Logs</h1>
-            <span class="feed-live-badge">
-              <span class="dot dot-sm"></span>
-              Live
-            </span>
+            <button type="button" class="feed-live-badge" id="streamToggle" title="Click to pause/resume live updates">
+              <span class="dot dot-sm" id="streamDot"></span>
+              <span id="streamLabel">Live</span>
+            </button>
           </div>
           <div class="feed-topbar-right">
             <span class="feed-updated" id="lastUpdated">waiting…</span>

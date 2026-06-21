@@ -261,9 +261,66 @@ button, input, select, textarea { font-family: inherit; }
   background: rgba(34,197,94,0.08);
   border: 1px solid rgba(34,197,94,0.2);
   border-radius: 999px; padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s var(--ease), border-color 0.12s var(--ease);
+}
+.feed-live-badge:hover { background: rgba(34,197,94,0.14); }
+.feed-live-badge.paused {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.04);
+  border-color: var(--border);
+}
+.feed-live-badge.paused:hover { background: rgba(255,255,255,0.07); }
+
+/* Paused dot becomes a static gray square instead of a pulsing circle.
+   Standalone class so it works on the topbar badge's dot AND the nav-rail
+   status dot, not just nested instances. */
+.dot.dot-paused,
+.feed-live-badge.paused .dot {
+  border-radius: 2px;
+  background: var(--text-dim) !important;
+  animation: none;
+  box-shadow: none;
 }
 .feed-updated {
   font-size: 12px; color: var(--text-dim);
+}
+
+/* ── Copy-link icon (per log row) ── */
+.log-link-btn {
+  background: transparent; border: none;
+  color: var(--text-dim); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s var(--ease), color 0.1s var(--ease), background 0.1s var(--ease);
+}
+.log-row:hover .log-link-btn,
+.log-row:focus-within .log-link-btn { opacity: 1; }
+.log-link-btn:hover { color: var(--info); background: rgba(59,130,246,0.1); }
+.log-link-btn.copied { color: var(--success); opacity: 1; }
+.log-link-btn svg { pointer-events: none; }
+
+/* ── Keyboard-focused row (j/k navigation) ──
+   Distinct from .selected (drawer-open state) so you can tell at a glance
+   whether you're just navigating vs actually viewing a log's detail. */
+.log-row.kb-focused {
+  outline: 1px solid rgba(136,136,136,0.4);
+  outline-offset: -1px;
+}
+.log-row.kb-focused.selected {
+  outline-color: var(--info);
+}
+
+/* ── Permalink highlight flash ── */
+@keyframes permalinkFlash {
+  0%   { background: rgba(59,130,246,0.22); }
+  100% { background: transparent; }
+}
+.log-row.permalink-highlight {
+  animation: permalinkFlash 1.8s var(--ease) 1;
 }
 
 /* Views */
