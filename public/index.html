@@ -34,10 +34,29 @@
   <div id="authOverlay" class="auth-overlay">
     <form id="authForm" class="auth-box">
       <div class="auth-mark">Tracely</div>
+      <p class="auth-tagline">High-performance log monitoring for distributed systems</p>
+
       <p class="auth-sub">Enter your access key to view logs</p>
       <input id="authInput" type="password" placeholder="Tracely key" autocomplete="off" autofocus />
-      <button type="submit">Unlock</button>
-      <p id="authError" class="auth-error" hidden>Incorrect key. Try again.</p>
+
+      <label class="auth-remember">
+        <input type="checkbox" id="rememberMeCheckbox" />
+        <span>Keep me logged in on this device</span>
+      </label>
+
+      <button type="submit" id="authSubmitBtn" class="auth-submit-btn">
+        <span class="auth-submit-label">Unlock</span>
+        <span class="auth-spinner" hidden aria-hidden="true"></span>
+      </button>
+
+      <p id="authError" class="auth-error" hidden></p>
+
+      <div class="auth-security-note">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span>Your key is sent only to your own Tracely API to authenticate requests — never to any third party. "Keep me logged in" stores it in this browser's local storage.</span>
+      </div>
     </form>
   </div>
 
@@ -220,7 +239,7 @@
 
             <div class="settings-card">
               <h2 class="section-title">Session</h2>
-              <p class="settings-hint">You're authenticated with a Tracely key stored in sessionStorage. It is cleared when you close the tab.</p>
+              <p class="settings-hint" id="sessionStorageHint">You're authenticated with a Tracely key stored in this browser.</p>
               <button id="lockBtn" class="btn-danger">Lock dashboard</button>
             </div>
 

@@ -8,10 +8,14 @@ const REFRESH_MS   = 5000;
 const LEVEL_COLORS = { INFO: '#3b82f6', WARN: '#f59e0b', ERROR: '#ef4444' };
 
 // ── Auth elements ──
-const authOverlay = document.getElementById('authOverlay');
-const authForm    = document.getElementById('authForm');
-const authInput   = document.getElementById('authInput');
-const authError   = document.getElementById('authError');
+const authOverlay        = document.getElementById('authOverlay');
+const authForm            = document.getElementById('authForm');
+const authInput           = document.getElementById('authInput');
+const authError           = document.getElementById('authError');
+const authSubmitBtn       = document.getElementById('authSubmitBtn');
+const authSubmitLabel     = document.querySelector('.auth-submit-label');
+const authSpinner         = document.querySelector('.auth-spinner');
+const rememberMeCheckbox  = document.getElementById('rememberMeCheckbox');
 
 // ── App shell ──
 const appEl       = document.getElementById('app');
@@ -76,27 +80,86 @@ let activeFilters = {
 
 // ─────────────────────────────────────────
 // Auth
+//
+// The key is held in sessionStorage by default (cleared when the tab
+// closes). Checking "Keep me logged in" instead persists it to
+// localStorage, which survives closing the tab/browser — convenient for a
+// daily-use dev tool, but it also means the key sticks around indefinitely
+// and is readable by any script that ever runs on this page. It's opt-in
+// for that reason; getStoredKey() checks both so the rest of the app
+// doesn't care which one a given session used.
 // ─────────────────────────────────────────
+const REMEMBER_KEY = 'tracelyRememberMe';
+
+function getStoredKey() {
+  return sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+}
+
+function storeKey(key, remember) {
+  if (remember) {
+    localStorage.setItem(STORAGE_KEY, key);
+    localStorage.setItem(REMEMBER_KEY, '1');
+    sessionStorage.removeItem(STORAGE_KEY);
+  } else {
+    sessionStorage.setItem(STORAGE_KEY, key);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(REMEMBER_KEY);
+  }
+}
+
+function clearStoredKey() {
+  sessionStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
+}
+
 function authHeaders() {
-  const key = sessionStorage.getItem(STORAGE_KEY);
+  const key = getStoredKey();
   return key ? { 'x-tracely-key': key } : {};
 }
 
 async function tryUnlock(key) {
   try {
     const res = await fetch('/api/stats', { headers: { 'x-tracely-key': key } });
-    return res.ok;
-  } catch { return false; }
+    return { ok: res.ok, networkError: false };
+  } catch {
+    return { ok: false, networkError: true };
+  }
+}
+
+function setAuthLoading(loading) {
+  authSubmitBtn.disabled = loading;
+  authSubmitLabel.hidden = loading;
+  authSpinner.hidden = !loading;
+}
+
+function showAuthError(message) {
+  authError.textContent = message;
+  authError.hidden = false;
 }
 
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const key = authInput.value.trim();
   if (!key) return;
+
   authError.hidden = true;
-  const ok = await tryUnlock(key);
-  if (!ok) { authError.hidden = false; return; }
-  sessionStorage.setItem(STORAGE_KEY, key);
+  setAuthLoading(true); // fires immediately on submit, not after the request resolves
+
+  const { ok, networkError } = await tryUnlock(key);
+
+  setAuthLoading(false);
+
+  if (!ok) {
+    showAuthError(
+      networkError
+        ? "Couldn't reach the server — check your connection and try again."
+        : 'Invalid key. Please check your Tracely project credentials.'
+    );
+    return;
+  }
+
+  storeKey(key, rememberMeCheckbox.checked);
   unlockApp();
   if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
 });
@@ -104,16 +167,28 @@ authForm.addEventListener('submit', async (e) => {
 function unlockApp() {
   authOverlay.hidden = true;
   appEl.hidden = false;
+  updateSessionStorageHint();
   startPolling();
 }
 
+function updateSessionStorageHint() {
+  const hintEl = document.getElementById('sessionStorageHint');
+  if (!hintEl) return;
+  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
+  hintEl.textContent = remembered
+    ? "You're authenticated with a Tracely key stored in this browser's local storage. It stays signed in until you lock the dashboard or clear site data."
+    : "You're authenticated with a Tracely key stored in sessionStorage. It is cleared when you close this tab.";
+}
+
 function lockApp(message) {
-  sessionStorage.removeItem(STORAGE_KEY);
+  clearStoredKey();
   stopPolling();
   appEl.hidden = true;
   authOverlay.hidden = false;
   authInput.value = '';
-  if (message) { authError.textContent = message; authError.hidden = false; }
+  rememberMeCheckbox.checked = false;
+  setAuthLoading(false);
+  if (message) showAuthError(message);
 }
 
 if (lockBtn) lockBtn.addEventListener('click', () => lockApp());
@@ -1526,7 +1601,7 @@ async function loadRetentionSetting() {
 
 if (retentionSelect) {
   retentionSelect.addEventListener('change', async () => {
-    const key = sessionStorage.getItem(STORAGE_KEY);
+    const key = getStoredKey();
     if (retentionStatus) retentionStatus.hidden = true;
     try {
       const res = await fetch('/api/settings', {
@@ -1614,7 +1689,7 @@ if (nukeConfirmBtn) {
     nukeConfirmBtn.textContent = 'Clearing…';
 
     try {
-      const key = sessionStorage.getItem(STORAGE_KEY);
+      const key = getStoredKey();
       const res = await fetch('/api/clear-logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1648,14 +1723,20 @@ document.addEventListener('keydown', (e) => {
   renderRedactionTags();
   applyStreamUI();
 
-  const key = sessionStorage.getItem(STORAGE_KEY);
+  const key = getStoredKey();
   if (!key) return;
-  const ok = await tryUnlock(key);
+
+  const { ok, networkError } = await tryUnlock(key);
   if (ok) {
     unlockApp();
     loadRetentionSetting();
     if (pendingUrlPermalink) primePermalink(pendingUrlPermalink);
+  } else if (networkError) {
+    // Don't wipe a possibly-valid remembered key just because the first
+    // request on page load happened to fail to reach the server — let
+    // the person retry rather than forcing them to re-enter the key.
+    showAuthError("Couldn't reach the server — check your connection and try again.");
   } else {
-    sessionStorage.removeItem(STORAGE_KEY);
+    clearStoredKey();
   }
 })();
