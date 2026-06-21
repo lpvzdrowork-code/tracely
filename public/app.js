@@ -37,6 +37,7 @@ const applyFiltersBtn   = document.getElementById('applyFilters');
 const clearFiltersBtn   = document.getElementById('clearFilters');
 const toggleFiltersBtn  = document.getElementById('toggleFilters');
 const filterExtrasEl    = document.getElementById('filterExtras');
+const quickRangeBtns    = document.querySelectorAll('.quick-range-btn');
 
 // ── Detail drawer ──
 const detailDrawer = document.getElementById('detailDrawer');
@@ -64,6 +65,8 @@ let activeFilters = {
   gameId: '',
   startTime: '',
   endTime: '',
+  startTimeRelative: '',
+  endTimeRelative: '',
 };
 
 // ─────────────────────────────────────────
@@ -171,11 +174,26 @@ async function refresh() {
 function buildLogsUrl() {
   const params = new URLSearchParams();
   if (activeFilters.levels.length) params.set('level', activeFilters.levels.join(','));
-  if (activeFilters.gameId)        params.set('gameId',     activeFilters.gameId);
-  if (activeFilters.startTime)     params.set('startTime',  activeFilters.startTime);
-  if (activeFilters.endTime)       params.set('endTime',    activeFilters.endTime);
+  if (activeFilters.gameId)        params.set('gameId', activeFilters.gameId);
+
+  // Relative windows (after:5m, after:1h…) are re-resolved against "now" on
+  // every call instead of once at parse time, so a quick-range filter keeps
+  // rolling forward as new logs arrive rather than freezing at click time.
+  const startTime = resolveTimeFilter(activeFilters.startTime, activeFilters.startTimeRelative);
+  const endTime   = resolveTimeFilter(activeFilters.endTime, activeFilters.endTimeRelative);
+  if (startTime) params.set('startTime', startTime);
+  if (endTime)   params.set('endTime', endTime);
+
   params.set('limit', activeFilters.search ? '200' : '100');
   return `/api/logs?${params.toString()}`;
+}
+
+function resolveTimeFilter(absolute, relative) {
+  if (relative) {
+    const ts = parseRelativeTime(relative);
+    return ts !== null ? String(ts) : '';
+  }
+  return absolute || '';
 }
 
 // ─────────────────────────────────────────
@@ -336,7 +354,8 @@ function parseTimeValue(raw) {
  */
 function parseQuery(raw) {
   const result = {
-    levels: [], gameId: '', logId: '', startTime: '', endTime: '', search: '',
+    levels: [], gameId: '', logId: '', startTime: '', endTime: '',
+    startTimeRelative: '', endTimeRelative: '', search: '',
     tokens: [],
   };
 
@@ -395,13 +414,26 @@ function parseQuery(raw) {
 
       } else if (canonical === 'after') {
         const { ts, error } = parseTimeValue(rawValue);
-        if (error) { token.valid = false; token.error = error; }
-        else { result.startTime = String(ts); }
+        if (error) {
+          token.valid = false; token.error = error;
+        } else if (parseRelativeTime(rawValue) !== null) {
+          // Relative expressions (5m, 1h, 24h…) stay "live" — re-resolved
+          // against the current time on every poll instead of freezing at
+          // the moment the filter was set.
+          result.startTimeRelative = rawValue;
+        } else {
+          result.startTime = String(ts);
+        }
 
       } else if (canonical === 'before') {
         const { ts, error } = parseTimeValue(rawValue);
-        if (error) { token.valid = false; token.error = error; }
-        else { result.endTime = String(ts); }
+        if (error) {
+          token.valid = false; token.error = error;
+        } else if (parseRelativeTime(rawValue) !== null) {
+          result.endTimeRelative = rawValue;
+        } else {
+          result.endTime = String(ts);
+        }
       }
 
       result.tokens.push(token);
@@ -421,12 +453,14 @@ function parseQuery(raw) {
 // ─────────────────────────────────────────
 function applyParsedQuery(parsed) {
   activeFilters = {
-    search:    parsed.search,
-    levels:    parsed.levels,
-    gameId:    parsed.gameId,
-    startTime: parsed.startTime,
-    endTime:   parsed.endTime,
-    logId:     parsed.logId ?? '',
+    search:            parsed.search,
+    levels:            parsed.levels,
+    gameId:            parsed.gameId,
+    startTime:         parsed.startTime,
+    endTime:           parsed.endTime,
+    startTimeRelative: parsed.startTimeRelative,
+    endTimeRelative:   parsed.endTimeRelative,
+    logId:             parsed.logId ?? '',
   };
 
   // Sync the legacy checkbox UI so they stay consistent
@@ -435,14 +469,16 @@ function applyParsedQuery(parsed) {
   });
   if (gameIdFilterEl) gameIdFilterEl.value = parsed.gameId;
 
-  // Sync datetime-local inputs (only if we have a numeric timestamp)
-  if (startTimeFilterEl && parsed.startTime) {
+  // Sync datetime-local inputs — only for absolute timestamps. A relative
+  // window ("last 5m") can't be represented as a fixed calendar value, so
+  // the picker stays blank and the search-bar pill remains the source of truth.
+  if (startTimeFilterEl && parsed.startTime && !parsed.startTimeRelative) {
     const d = new Date(Number(parsed.startTime) * 1000);
     startTimeFilterEl.value = toDatetimeLocal(d);
   } else if (startTimeFilterEl) {
     startTimeFilterEl.value = '';
   }
-  if (endTimeFilterEl && parsed.endTime) {
+  if (endTimeFilterEl && parsed.endTime && !parsed.endTimeRelative) {
     const d = new Date(Number(parsed.endTime) * 1000);
     endTimeFilterEl.value = toDatetimeLocal(d);
   } else if (endTimeFilterEl) {
@@ -450,6 +486,7 @@ function applyParsedQuery(parsed) {
   }
 
   renderTokenPills(parsed.tokens);
+  syncQuickRangeButtons(parsed.tokens);
   knownLogIds.clear();
   refresh();
 }
@@ -459,6 +496,43 @@ function toDatetimeLocal(date) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+// ─────────────────────────────────────────
+// Quick range shortcuts (5m / 1h / 24h)
+// ─────────────────────────────────────────
+
+/** Highlight whichever quick-range button matches the current `after:` token, if any. */
+function syncQuickRangeButtons(tokens) {
+  const afterToken = tokens.find((t) => t.key === 'after' && t.valid);
+  const rawVal = afterToken ? afterToken.value.toLowerCase() : null;
+  quickRangeBtns.forEach((btn) => {
+    btn.classList.toggle('active', rawVal !== null && rawVal === btn.dataset.range.toLowerCase());
+  });
+}
+
+/** Strip every token for a canonical key (e.g. 'after') out of the search bar and re-apply. */
+function clearQueryKey(canonical) {
+  let current = searchInput.value;
+  for (const alias of Object.entries(TOKEN_ALIASES).filter(([, c]) => c === canonical).map(([a]) => a)) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?:^|\\s)${escaped}:(?:"[^"]*"|'[^']*'|\\S+)`, 'gi');
+    current = current.replace(re, ' ');
+  }
+  current = current.trim().replace(/\s{2,}/g, ' ');
+  searchInput.value = current;
+  applyParsedQuery(parseQuery(current));
+}
+
+quickRangeBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    // Click an active button again to clear the time filter entirely.
+    if (btn.classList.contains('active')) {
+      clearQueryKey('after');
+    } else {
+      injectQueryToken(`after:${btn.dataset.range}`);
+    }
+  });
+});
 
 // ─────────────────────────────────────────
 // Token pills

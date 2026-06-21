@@ -350,6 +350,22 @@ button, input, select, textarea { font-family: inherit; }
 .chip[data-level="ERROR"]:has(input:checked) { border-color: var(--error); background: rgba(239,68,68,0.1);  color: var(--error); }
 .chip:has(input:checked) .chip-dot { opacity: 1; }
 
+/* ── Quick range shortcuts ── */
+.quick-range-bar {
+  display: flex; gap: 4px; flex-shrink: 0;
+}
+.quick-range-btn {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-secondary); font-size: 11.5px; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 5px 11px; cursor: pointer;
+  transition: border-color 0.12s var(--ease), color 0.12s var(--ease), background 0.12s var(--ease);
+}
+.quick-range-btn:hover { border-color: #3a3a3a; color: var(--text); }
+.quick-range-btn.active {
+  border-color: var(--info); background: rgba(59,130,246,0.1); color: var(--info);
+}
+
 /* expandable extras */
 .filter-extras {
   display: none; align-items: center; gap: 6px;
