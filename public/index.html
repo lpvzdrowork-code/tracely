@@ -425,6 +425,25 @@
         </div>
       </div>
 
+      <!-- Delete workspace confirmation modal -->
+      <div class="modal-overlay" id="deleteWsModalOverlay" hidden>
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="deleteWsModalTitle">
+          <h3 class="modal-title" id="deleteWsModalTitle">Delete workspace</h3>
+          <p class="modal-text">This permanently deletes <strong id="deleteWsModalName"></strong>, every log in it, and its API key. Any game still posting with that key will start getting rejected with 401s. This action cannot be undone.</p>
+
+          <label class="modal-confirm-row">
+            <input type="checkbox" id="deleteWsConfirmCheckbox" />
+            <span>I understand this can't be undone</span>
+          </label>
+
+          <div class="modal-actions">
+            <button id="deleteWsCancelBtn" class="btn-ghost btn-sm">Cancel</button>
+            <button id="deleteWsConfirmBtn" class="btn-danger btn-sm" disabled>Delete workspace</button>
+          </div>
+          <p class="modal-error" id="deleteWsModalError" hidden></p>
+        </div>
+      </div>
+
       <!-- RIGHT: Detail drawer -->
       <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
         <div class="detail-header">

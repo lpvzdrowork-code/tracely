@@ -1238,6 +1238,15 @@ html.theme-light .segmented-btn.active {
   padding: 4px 10px;
   flex-shrink: 0;
 }
+.ws-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ws-row-delete {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: transparent; border: none; border-radius: var(--radius-sm);
+  color: var(--text-dim); cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.ws-row-delete:hover { color: var(--error); background: rgba(239,68,68,0.12); }
 .ws-new-row { display: flex; gap: 8px; }
 .ws-new-row .filter-input { flex: 1; }
 .ws-new-error { margin: -6px 0 0; font-size: 12px; color: var(--error); }

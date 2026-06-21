@@ -360,6 +360,11 @@ navItems.forEach((btn) => {
 // first workspace in the list.
 // ─────────────────────────────────────────
 
+// Matches the stroke-width/viewBox of the nav-rail icons in index.html so
+// it doesn't look like a different icon set bolted on.
+const WS_TRASH_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+
+
 function pickInitialWorkspace(list) {
   if (!list || !list.length) return null;
   const savedId = Number(localStorage.getItem(ACTIVE_WS_KEY));
@@ -430,20 +435,41 @@ function renderWorkspacesSettingsList() {
     text.append(name, key);
     row.appendChild(text);
 
+    const actions = document.createElement('div');
+    actions.className = 'ws-row-actions';
+
     if (isActive) {
       const badge = document.createElement('span');
       badge.className = 'ws-row-current';
       badge.textContent = 'Current';
-      row.appendChild(badge);
+      actions.appendChild(badge);
     } else {
       const switchBtn = document.createElement('button');
       switchBtn.type = 'button';
       switchBtn.className = 'btn-ghost btn-sm';
       switchBtn.textContent = 'Switch';
       switchBtn.addEventListener('click', () => switchWorkspace(ws.id));
-      row.appendChild(switchBtn);
+      actions.appendChild(switchBtn);
+
+      // Delete is only ever offered on a row that isn't the active
+      // workspace — switching away first is what stands in for "you can't
+      // delete the one you're currently looking at," so there's no extra
+      // state to track for that rule. Also hidden entirely when this is
+      // the last workspace left, matching the server-side guard in
+      // DELETE /api/workspaces.
+      if (allWorkspaces.length > 1) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'ws-row-delete';
+        deleteBtn.title = `Delete ${ws.name}`;
+        deleteBtn.setAttribute('aria-label', `Delete ${ws.name}`);
+        deleteBtn.innerHTML = WS_TRASH_ICON_SVG;
+        deleteBtn.addEventListener('click', () => openDeleteWsModal(ws));
+        actions.appendChild(deleteBtn);
+      }
     }
 
+    row.appendChild(actions);
     wsSettingsList.appendChild(row);
   }
 }
@@ -2176,6 +2202,83 @@ if (nukeConfirmBtn) {
 }
 
 // ─────────────────────────────────────────
+// DELETE WORKSPACE
+// ─────────────────────────────────────────
+const deleteWsModalOverlay    = document.getElementById('deleteWsModalOverlay');
+const deleteWsModalName       = document.getElementById('deleteWsModalName');
+const deleteWsCancelBtn       = document.getElementById('deleteWsCancelBtn');
+const deleteWsConfirmBtn      = document.getElementById('deleteWsConfirmBtn');
+const deleteWsConfirmCheckbox = document.getElementById('deleteWsConfirmCheckbox');
+const deleteWsModalError      = document.getElementById('deleteWsModalError');
+
+let workspacePendingDelete = null; // { id, name } passed in from the row's trash button
+
+function openDeleteWsModal(ws) {
+  if (!deleteWsModalOverlay) return;
+  workspacePendingDelete = ws;
+  if (deleteWsModalName) deleteWsModalName.textContent = ws.name;
+  deleteWsConfirmCheckbox.checked = false;
+  deleteWsConfirmBtn.disabled = true;
+  deleteWsModalError.hidden = true;
+  deleteWsModalOverlay.hidden = false;
+}
+
+function closeDeleteWsModal() {
+  if (deleteWsModalOverlay) deleteWsModalOverlay.hidden = true;
+  workspacePendingDelete = null;
+}
+
+if (deleteWsCancelBtn) deleteWsCancelBtn.addEventListener('click', closeDeleteWsModal);
+if (deleteWsModalOverlay) {
+  deleteWsModalOverlay.addEventListener('click', (e) => {
+    if (e.target === deleteWsModalOverlay) closeDeleteWsModal();
+  });
+}
+if (deleteWsConfirmCheckbox) {
+  deleteWsConfirmCheckbox.addEventListener('change', () => {
+    deleteWsConfirmBtn.disabled = !deleteWsConfirmCheckbox.checked;
+  });
+}
+
+if (deleteWsConfirmBtn) {
+  deleteWsConfirmBtn.addEventListener('click', async () => {
+    if (!workspacePendingDelete) return;
+    const ws = workspacePendingDelete;
+
+    deleteWsConfirmBtn.disabled = true;
+    deleteWsConfirmBtn.textContent = 'Deleting…';
+    deleteWsModalError.hidden = true;
+
+    try {
+      const res = await fetch('/api/workspaces', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: ws.id }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        deleteWsModalError.textContent = data.error || 'Could not delete workspace.';
+        deleteWsModalError.hidden = false;
+        return;
+      }
+
+      allWorkspaces = allWorkspaces.filter((w) => Number(w.id) !== Number(ws.id));
+      closeDeleteWsModal();
+      renderWorkspaceSwitcher();
+      renderWorkspacesSettingsList();
+    } catch {
+      deleteWsModalError.textContent = "Couldn't reach the server — try again.";
+      deleteWsModalError.hidden = false;
+    } finally {
+      deleteWsConfirmBtn.disabled = !deleteWsConfirmCheckbox.checked;
+      deleteWsConfirmBtn.textContent = 'Delete workspace';
+    }
+  });
+}
+
+// ─────────────────────────────────────────
 // KEYBOARD SHORTCUTS MODAL
 // ─────────────────────────────────────────
 const shortcutsModal = document.getElementById('shortcutsModal');
@@ -2204,6 +2307,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape' && nukeModalOverlay && !nukeModalOverlay.hidden) closeNukeModal();
+  if (e.key === 'Escape' && deleteWsModalOverlay && !deleteWsModalOverlay.hidden) closeDeleteWsModal();
   if (e.key === 'Escape' && navWsPanel && !navWsPanel.hidden) closeWsSwitcherPanel();
 });
 
