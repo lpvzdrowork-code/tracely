@@ -11,6 +11,10 @@ const CLEANUP_CONCURRENCY = 10;
 // set the CRON_SECRET environment variable in your Vercel project — this check
 // makes sure nobody else can hit the endpoint and wipe logs early.
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
 

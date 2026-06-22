@@ -1,10 +1,17 @@
 import { createUser, createWorkspace } from '../lib/auth.js';
 import { createSessionToken, buildSessionCookie } from '../lib/session.js';
+import { enforceRateLimit } from '../lib/rate-limit.js';
+
+// Tighter than login — account creation is expensive (scrypt + 2 DB writes)
+// and a signup flood could fill the users table with junk accounts.
+const SIGNUP_RATE_LIMIT = { limit: 5, windowMs: 60 * 60 * 1000 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  if (!enforceRateLimit(req, res, SIGNUP_RATE_LIMIT)) return;
 
   const { email, password, workspaceName } = req.body || {};
 

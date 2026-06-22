@@ -40,19 +40,16 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // There's no "create your first workspace" screen outside signup, and
-    // login resolves a session straight into one — so every account has
-    // to keep at least one. The UI already never offers delete on the
-    // active workspace, but this is the server-side backstop in case that
-    // ever drifts, or this endpoint gets called directly.
-    const remaining = await getWorkspacesForUser(user.id);
-    if (remaining.length <= 1) {
-      return res.status(400).json({ error: "Can't delete your only workspace" });
-    }
-
-    const deleted = await deleteWorkspace(id, user.id);
-    if (!deleted) {
+    // deleteWorkspace now enforces the "at least one workspace" rule
+    // atomically inside its own SQL batch — no separate pre-check needed
+    // here, which closes the TOCTOU race that existed when this handler did
+    // a SELECT count, checked it, then issued a separate DELETE.
+    const outcome = await deleteWorkspace(id, user.id);
+    if (outcome === 'not_found') {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (outcome === 'last_workspace') {
+      return res.status(400).json({ error: "Can't delete your only workspace" });
     }
     return res.status(204).end();
   }
