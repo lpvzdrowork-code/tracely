@@ -60,21 +60,30 @@ export default async function handler(req, res) {
     const batch = workspaceIds.slice(i, i + CLEANUP_CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (workspaceId) => {
-        const settings = await getSettings(workspaceId);
-        const retentionDays = settings.logRetentionDays || fallbackDays;
-        const deleted = await deleteLogsOlderThan(workspaceId, retentionDays);
-        return { workspaceId, deleted, retentionDays };
+        // Isolate each workspace so a transient Turso error (connection
+        // spike, throttle) on one doesn't abort the rest of the batch.
+        // The error is captured in the result row so the response JSON
+        // surfaces which workspaces failed without crashing the whole run.
+        try {
+          const settings = await getSettings(workspaceId);
+          const retentionDays = settings.logRetentionDays || fallbackDays;
+          const deleted = await deleteLogsOlderThan(workspaceId, retentionDays);
+          return { workspaceId, deleted, retentionDays };
+        } catch (err) {
+          return { workspaceId, deleted: 0, error: err.message };
+        }
       }),
     );
     results.push(...batchResults);
   }
 
   const totalDeleted = results.reduce((sum, r) => sum + r.deleted, 0);
+  const failed       = results.filter((r) => r.error);
 
   // Unrelated to log retention, but it's the same daily cron and there's no
   // reason to stand up a second one just for this — scrub any rotated-out
   // API key hash whose grace window has passed.
   const expiredKeysCleared = await clearExpiredPreviousApiKeys();
 
-  return res.status(200).json({ workspaces: results.length, totalDeleted, expiredKeysCleared, results });
+  return res.status(200).json({ workspaces: results.length, totalDeleted, failed: failed.length, expiredKeysCleared, results });
 }

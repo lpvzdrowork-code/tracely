@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { workspaceId, level, gameId, page, limit, startTime, endTime } = req.query;
+  const { workspaceId, level, gameId, search, page, limit, startTime, endTime } = req.query;
 
   const ctx = await requireWorkspace(req, res, workspaceId);
   if (!ctx) return;
@@ -19,6 +19,7 @@ export default async function handler(req, res) {
     workspaceId: ctx.workspace.id,
     level: levels,
     gameId,
+    search,
     startTime,
     endTime,
     page,

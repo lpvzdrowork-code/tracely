@@ -848,7 +848,9 @@ function buildLogsUrl() {
   if (startTime) params.set('startTime', startTime);
   if (endTime)   params.set('endTime', endTime);
 
-  params.set('limit', activeFilters.search ? '200' : '100');
+  if (activeFilters.search) params.set('search', activeFilters.search);
+
+  params.set('limit', '100');
   return `/api/logs?${params.toString()}`;
 }
 
@@ -1398,28 +1400,17 @@ searchInput.addEventListener('input', () => {
 });
 
 // ─────────────────────────────────────────
-// Log feed — client-side message + id filter
+// Log feed — client-side id filter
+//
+// level, gameId, time-range, and message search are all handled server-side
+// via /api/logs query params. Only `id:` filtering stays client-side: it
+// targets a single already-fetched row by exact ID and doesn't need a DB
+// round-trip.
 // ─────────────────────────────────────────
 function applyClientFilter(logs) {
-  let out = logs;
-
-  // Free-text message search
-  const q = (activeFilters.search || '').trim().toLowerCase();
-  if (q) {
-    out = out.filter((l) =>
-      l.message.toLowerCase().includes(q) ||
-      String(l.gameId).includes(q) ||
-      l.level.toLowerCase().includes(q)
-    );
-  }
-
-  // Specific log ID filter (client-side only)
-  if (activeFilters.logId) {
-    const targetId = Number(activeFilters.logId);
-    out = out.filter((l) => l.id === targetId);
-  }
-
-  return out;
+  if (!activeFilters.logId) return logs;
+  const targetId = Number(activeFilters.logId);
+  return logs.filter((l) => l.id === targetId);
 }
 
 function renderLogs(logs, total) {
@@ -1428,7 +1419,7 @@ function renderLogs(logs, total) {
   if (logTotalEl) {
     const shown = filtered.length;
     logTotalEl.textContent = total != null
-      ? (activeFilters.search || activeFilters.logId
+      ? (activeFilters.logId
           ? `${shown} of ${total.toLocaleString()}`
           : `${total.toLocaleString()} total`)
       : '';
