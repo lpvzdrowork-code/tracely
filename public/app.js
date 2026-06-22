@@ -2646,7 +2646,7 @@ if (nukeConfirmBtn) {
     nukeConfirmBtn.textContent = 'Clearing…';
 
     try {
-      const res = await fetch('/api/clear-logs', {
+      const res = await fetch('/api/logs', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
