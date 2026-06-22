@@ -459,6 +459,39 @@
         </div>
       </div>
 
+      <!-- Rotate API key modal -->
+      <div class="modal-overlay" id="rotateKeyModalOverlay" hidden>
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="rotateKeyModalTitle">
+          <h3 class="modal-title" id="rotateKeyModalTitle">Rotate API key</h3>
+
+          <div id="rotateKeyConfirmStep">
+            <p class="modal-text">This generates a new key for <strong id="rotateKeyModalName"></strong>. The current key (<code id="rotateKeyModalLast4"></code>) keeps working for a grace period afterward so you can update your game, then stops automatically — after that it cannot be recovered.</p>
+            <label class="modal-confirm-row">
+              <input type="checkbox" id="rotateKeyConfirmCheckbox" />
+              <span>I understand the old key will stop working</span>
+            </label>
+            <div class="modal-actions">
+              <button id="rotateKeyCancelBtn" class="btn-ghost btn-sm">Cancel</button>
+              <button id="rotateKeyConfirmBtn" class="btn-primary btn-sm" disabled>Rotate key</button>
+            </div>
+            <p class="modal-error" id="rotateKeyModalError" hidden></p>
+          </div>
+
+          <div id="rotateKeyResultStep" hidden>
+            <p class="modal-text">New key for <strong id="rotateKeyResultName"></strong>. Save this now — it won't be shown again.</p>
+            <div class="api-key-box">
+              <code id="rotateKeyValue"></code>
+              <button type="button" id="rotateKeyCopyBtn" class="btn-ghost btn-sm">Copy</button>
+            </div>
+            <p class="modal-hint" id="rotateKeyGraceNote"></p>
+            <div class="modal-actions">
+              <button id="rotateKeyDoneBtn" class="btn-primary btn-sm">Done</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- RIGHT: Detail drawer -->
       <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
         <div class="detail-header">

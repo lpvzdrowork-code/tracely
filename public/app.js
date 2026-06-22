@@ -140,6 +140,22 @@ const wsNewKeyNote    = document.getElementById('wsNewKeyNote');
 const lockBtn             = document.getElementById('lockBtn');
 const accountEmailHint    = document.getElementById('accountEmailHint');
 
+// ── Rotate API key modal ──
+const rotateKeyModalOverlay    = document.getElementById('rotateKeyModalOverlay');
+const rotateKeyConfirmStep     = document.getElementById('rotateKeyConfirmStep');
+const rotateKeyResultStep      = document.getElementById('rotateKeyResultStep');
+const rotateKeyModalName       = document.getElementById('rotateKeyModalName');
+const rotateKeyModalLast4      = document.getElementById('rotateKeyModalLast4');
+const rotateKeyConfirmCheckbox = document.getElementById('rotateKeyConfirmCheckbox');
+const rotateKeyCancelBtn       = document.getElementById('rotateKeyCancelBtn');
+const rotateKeyConfirmBtn      = document.getElementById('rotateKeyConfirmBtn');
+const rotateKeyModalError      = document.getElementById('rotateKeyModalError');
+const rotateKeyResultName      = document.getElementById('rotateKeyResultName');
+const rotateKeyValue           = document.getElementById('rotateKeyValue');
+const rotateKeyCopyBtn         = document.getElementById('rotateKeyCopyBtn');
+const rotateKeyGraceNote       = document.getElementById('rotateKeyGraceNote');
+const rotateKeyDoneBtn         = document.getElementById('rotateKeyDoneBtn');
+
 // ─────────────────────────────────────────
 // State
 // ─────────────────────────────────────────
@@ -459,6 +475,7 @@ navItems.forEach((btn) => {
 // Matches the stroke-width/viewBox of the nav-rail icons in index.html so
 // it doesn't look like a different icon set bolted on.
 const WS_TRASH_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+const WS_ROTATE_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>`;
 
 
 function pickInitialWorkspace(list) {
@@ -547,6 +564,15 @@ function renderWorkspacesSettingsList() {
 
     const actions = document.createElement('div');
     actions.className = 'ws-row-actions';
+
+    const rotateBtn = document.createElement('button');
+    rotateBtn.type = 'button';
+    rotateBtn.className = 'ws-row-rotate';
+    rotateBtn.title = `Rotate ${ws.name}'s API key`;
+    rotateBtn.setAttribute('aria-label', `Rotate ${ws.name}'s API key`);
+    rotateBtn.innerHTML = WS_ROTATE_ICON_SVG;
+    rotateBtn.addEventListener('click', () => openRotateKeyModal(ws));
+    actions.appendChild(rotateBtn);
 
     if (isActive) {
       const badge = document.createElement('span');
@@ -2392,6 +2418,117 @@ if (deleteWsConfirmBtn) {
 }
 
 // ─────────────────────────────────────────
+// ROTATE API KEY
+// ─────────────────────────────────────────
+let workspacePendingRotate = null; // { id, name, apiKeyLast4 } passed in from the row's rotate button
+
+function openRotateKeyModal(ws) {
+  if (!rotateKeyModalOverlay) return;
+  workspacePendingRotate = ws;
+  if (rotateKeyModalName)  rotateKeyModalName.textContent = ws.name;
+  if (rotateKeyModalLast4) rotateKeyModalLast4.textContent = `····${ws.apiKeyLast4 ?? '····'}`;
+  rotateKeyConfirmCheckbox.checked = false;
+  rotateKeyConfirmBtn.disabled = true;
+  rotateKeyConfirmBtn.textContent = 'Rotate key';
+  rotateKeyModalError.hidden = true;
+  rotateKeyConfirmStep.hidden = false;
+  rotateKeyResultStep.hidden = true;
+  rotateKeyModalOverlay.hidden = false;
+}
+
+function closeRotateKeyModal() {
+  if (rotateKeyModalOverlay) rotateKeyModalOverlay.hidden = true;
+  workspacePendingRotate = null;
+}
+
+if (rotateKeyCancelBtn) rotateKeyCancelBtn.addEventListener('click', closeRotateKeyModal);
+if (rotateKeyDoneBtn)   rotateKeyDoneBtn.addEventListener('click', closeRotateKeyModal);
+if (rotateKeyModalOverlay) {
+  rotateKeyModalOverlay.addEventListener('click', (e) => {
+    // Only the confirm step backs out on an overlay click — once the new
+    // key is showing, an accidental click outside the box shouldn't be
+    // able to dismiss it before it's been copied.
+    if (e.target === rotateKeyModalOverlay && rotateKeyResultStep.hidden) {
+      closeRotateKeyModal();
+    }
+  });
+}
+if (rotateKeyConfirmCheckbox) {
+  rotateKeyConfirmCheckbox.addEventListener('change', () => {
+    rotateKeyConfirmBtn.disabled = !rotateKeyConfirmCheckbox.checked;
+  });
+}
+
+if (rotateKeyConfirmBtn) {
+  rotateKeyConfirmBtn.addEventListener('click', async () => {
+    if (!workspacePendingRotate) return;
+    const ws = workspacePendingRotate;
+
+    rotateKeyConfirmBtn.disabled = true;
+    rotateKeyConfirmBtn.textContent = 'Rotating…';
+    rotateKeyModalError.hidden = true;
+
+    try {
+      const res = await fetch('/api/rotate-key', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: ws.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        rotateKeyModalError.textContent = data.error || 'Could not rotate key.';
+        rotateKeyModalError.hidden = false;
+        return;
+      }
+
+      // Update local state so the row's masked key and the onboarding
+      // snippet reflect the new last4 immediately, without a full reload.
+      allWorkspaces = allWorkspaces.map((w) =>
+        Number(w.id) === Number(ws.id) ? { ...w, apiKeyLast4: data.workspace.apiKeyLast4 } : w,
+      );
+      if (currentWorkspace && Number(currentWorkspace.id) === Number(ws.id)) {
+        currentWorkspace = { ...currentWorkspace, apiKeyLast4: data.workspace.apiKeyLast4 };
+        updateOnboardingSnippet();
+      }
+      renderWorkspaceSwitcher();
+      renderWorkspacesSettingsList();
+
+      if (rotateKeyResultName) rotateKeyResultName.textContent = ws.name;
+      if (rotateKeyValue)      rotateKeyValue.textContent = data.workspace.apiKey;
+      if (rotateKeyGraceNote) {
+        rotateKeyGraceNote.textContent = data.workspace.graceExpiresAt
+          ? `The previous key stays valid until ${formatFullTime(data.workspace.graceExpiresAt)}, then stops working.`
+          : 'The previous key has already stopped working.';
+      }
+      rotateKeyConfirmStep.hidden = true;
+      rotateKeyResultStep.hidden = false;
+      showToast(`API key rotated for "${ws.name}"`);
+    } catch {
+      rotateKeyModalError.textContent = "Couldn't reach the server — try again.";
+      rotateKeyModalError.hidden = false;
+    } finally {
+      rotateKeyConfirmBtn.disabled = !rotateKeyConfirmCheckbox.checked;
+      rotateKeyConfirmBtn.textContent = 'Rotate key';
+    }
+  });
+}
+
+if (rotateKeyCopyBtn) {
+  rotateKeyCopyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(rotateKeyValue.textContent);
+      const original = rotateKeyCopyBtn.textContent;
+      rotateKeyCopyBtn.textContent = 'Copied';
+      setTimeout(() => { rotateKeyCopyBtn.textContent = original; }, 1500);
+    } catch {
+      /* Clipboard API unavailable — key is still visible/selectable. */
+    }
+  });
+}
+
+// ─────────────────────────────────────────
 // KEYBOARD SHORTCUTS MODAL
 // ─────────────────────────────────────────
 const shortcutsModal = document.getElementById('shortcutsModal');
@@ -2421,6 +2558,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape' && nukeModalOverlay && !nukeModalOverlay.hidden) closeNukeModal();
   if (e.key === 'Escape' && deleteWsModalOverlay && !deleteWsModalOverlay.hidden) closeDeleteWsModal();
+  if (e.key === 'Escape' && rotateKeyModalOverlay && !rotateKeyModalOverlay.hidden && rotateKeyResultStep.hidden) closeRotateKeyModal();
   if (e.key === 'Escape' && navWsPanel && !navWsPanel.hidden) closeWsSwitcherPanel();
 });
 

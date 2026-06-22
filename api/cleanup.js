@@ -1,4 +1,4 @@
-import { deleteLogsOlderThan, getSettings, getAllWorkspaceIds } from '../lib/db.js';
+import { deleteLogsOlderThan, getSettings, getAllWorkspaceIds, clearExpiredPreviousApiKeys } from '../lib/db.js';
 
 // Triggered daily by Vercel Cron (see vercel.json). Vercel automatically sends
 // `Authorization: Bearer <CRON_SECRET>` on cron-triggered requests once you've
@@ -28,5 +28,11 @@ export default async function handler(req, res) {
   }
 
   const totalDeleted = results.reduce((sum, r) => sum + r.deleted, 0);
-  return res.status(200).json({ workspaces: results.length, totalDeleted, results });
+
+  // Unrelated to log retention, but it's the same daily cron and there's no
+  // reason to stand up a second one just for this — scrub any rotated-out
+  // API key hash whose grace window has passed.
+  const expiredKeysCleared = await clearExpiredPreviousApiKeys();
+
+  return res.status(200).json({ workspaces: results.length, totalDeleted, expiredKeysCleared, results });
 }
