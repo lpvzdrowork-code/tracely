@@ -520,7 +520,7 @@ async function loadAdminStats() {
   if (errEl) errEl.hidden = true;
 
   try {
-    const res = await fetch('/api/admin/stats', { credentials: 'same-origin' });
+    const res = await fetch('/api/admin?action=stats', { credentials: 'same-origin' });
     if (!res.ok) {
       if (errEl) { errEl.textContent = 'Failed to load stats.'; errEl.hidden = false; }
       return;
@@ -578,7 +578,7 @@ document.getElementById('adminUserLookupBtn')?.addEventListener('click', async (
   }
 
   try {
-    const res = await fetch(`/api/admin/user-view?userId=${encodeURIComponent(userId)}`, { credentials: 'same-origin' });
+    const res = await fetch(`/api/admin?action=user-view&userId=${encodeURIComponent(userId)}`, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (errEl) { errEl.textContent = data.error || 'Lookup failed.'; errEl.hidden = false; }
@@ -620,7 +620,7 @@ document.getElementById('adminWsViewBtn')?.addEventListener('click', async () =>
   if (errEl) errEl.hidden = true;
 
   try {
-    const res = await fetch(`/api/admin/user-view?workspaceId=${encodeURIComponent(wid)}`, { credentials: 'same-origin' });
+    const res = await fetch(`/api/admin?action=user-view&workspaceId=${encodeURIComponent(wid)}`, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (errEl) { errEl.textContent = data.error || 'Failed to load workspace.'; errEl.hidden = false; }
@@ -670,11 +670,11 @@ document.getElementById('adminImpersonateBtn')?.addEventListener('click', async 
   )) return;
 
   try {
-    const res = await fetch('/api/admin/impersonate', {
+    const res = await fetch('/api/admin', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetUserId: userId }),
+      body: JSON.stringify({ action: 'impersonate', targetUserId: userId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -717,11 +717,11 @@ async function adminWorkspaceAction(action) {
   if (!confirm(confirmMsg)) return;
 
   try {
-    const res = await fetch('/api/admin/workspace-control', {
+    const res = await fetch('/api/admin', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspaceId, action, reason: reasonInput?.value?.trim() || undefined }),
+      body: JSON.stringify({ action: 'workspace-control', workspaceId, wsAction: action, reason: reasonInput?.value?.trim() || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
