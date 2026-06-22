@@ -392,6 +392,12 @@ button, input, select, textarea { font-family: inherit; }
 }
 .nav-ws-row.active .nav-ws-row-dot { background: var(--info); }
 
+.nav-ws-row-check {
+  flex-shrink: 0;
+  display: flex; align-items: center;
+  color: var(--info);
+}
+
 .nav-ws-row-name {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

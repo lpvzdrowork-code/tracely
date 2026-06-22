@@ -490,6 +490,7 @@ function renderWorkspaceSwitcher() {
     row.className = 'nav-ws-row' + (isActive ? ' active' : '');
     row.dataset.id = ws.id;
     row.setAttribute('role', 'menuitem');
+    if (isActive) row.setAttribute('aria-current', 'true');
 
     const dot = document.createElement('span');
     dot.className = 'nav-ws-row-dot';
@@ -499,6 +500,19 @@ function renderWorkspaceSwitcher() {
     name.textContent = ws.name;
 
     row.append(dot, name);
+
+    // The dot+tint already mark the active row, but both rely on color
+    // alone (blue vs. gray) — easy to miss at 6px, and a problem for
+    // anyone who can't distinguish them by hue. A checkmark gives the
+    // same information a second, color-independent way.
+    if (isActive) {
+      const check = document.createElement('span');
+      check.className = 'nav-ws-row-check';
+      check.setAttribute('aria-hidden', 'true');
+      check.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      row.appendChild(check);
+    }
+
     row.addEventListener('click', () => {
       closeWsSwitcherPanel();
       if (!isActive) switchWorkspace(ws.id);
