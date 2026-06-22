@@ -93,6 +93,9 @@ function showToast(message, { type = 'success', duration = 3200 } = {}) {
 const statInfoEl  = document.getElementById('statInfo');
 const statWarnEl  = document.getElementById('statWarn');
 const statErrorEl = document.getElementById('statError');
+const statRateCard  = document.getElementById('statRateCard');
+const statRateValue = document.getElementById('statRateValue');
+const statRateTrend = document.getElementById('statRateTrend');
 
 // ── Log feed ──
 const logFeedEl   = document.getElementById('logFeed');
@@ -860,11 +863,65 @@ function resolveTimeFilter(absolute, relative) {
 // ─────────────────────────────────────────
 // Stats
 // ─────────────────────────────────────────
+// Error rate at/above this is treated as "elevated" for the red
+// highlight — meant to catch a real cluster of failures, not flag the
+// card the instant one stray ERROR shows up in an otherwise quiet window.
+const ELEVATED_ERROR_RATE = 0.10; // 10%
+// Trend arrows only show for a swing bigger than this, in percentage
+// points, so the card isn't flickering up/down on noise between refreshes.
+const TREND_DEADBAND_PP = 0.5;
+
 function renderStats(stats) {
   const counts = stats.counts ?? stats;
   statInfoEl.textContent  = (counts.INFO  ?? 0).toLocaleString();
   statWarnEl.textContent  = (counts.WARN  ?? 0).toLocaleString();
   statErrorEl.textContent = (counts.ERROR ?? 0).toLocaleString();
+
+  const recent = stats.recent;
+  if (!statRateCard || !statRateValue || !statRateTrend) return;
+
+  if (!recent || recent.errorRate === null || recent.errorRate === undefined) {
+    statRateValue.textContent = '—';
+    statRateTrend.textContent = '';
+    statRateTrend.className = 'stat-trend';
+    statRateCard.classList.remove('elevated');
+    statRateCard.title = 'No log activity in the last 10 minutes';
+    return;
+  }
+
+  const ratePct = recent.errorRate * 100;
+  statRateValue.textContent = `${ratePct < 10 ? ratePct.toFixed(1) : Math.round(ratePct)}%`;
+  statRateCard.classList.toggle('elevated', recent.errorRate >= ELEVATED_ERROR_RATE);
+  statRateCard.title =
+    `${recent.errorCount.toLocaleString()} of ${recent.total.toLocaleString()} logs in the last ${recent.windowMinutes} min were ERROR — click to filter the feed to ERROR logs`;
+
+  if (recent.previousErrorRate === null || recent.previousErrorRate === undefined) {
+    statRateTrend.textContent = '';
+    statRateTrend.className = 'stat-trend';
+    return;
+  }
+
+  const deltaPp = (recent.errorRate - recent.previousErrorRate) * 100;
+  if (deltaPp > TREND_DEADBAND_PP) {
+    statRateTrend.textContent = `↑ ${deltaPp.toFixed(1)}pp`;
+    statRateTrend.className = 'stat-trend up';
+  } else if (deltaPp < -TREND_DEADBAND_PP) {
+    statRateTrend.textContent = `↓ ${Math.abs(deltaPp).toFixed(1)}pp`;
+    statRateTrend.className = 'stat-trend down';
+  } else {
+    statRateTrend.textContent = 'steady';
+    statRateTrend.className = 'stat-trend flat';
+  }
+}
+
+if (statRateCard) {
+  statRateCard.addEventListener('click', () => {
+    // Jump to the Logs view first — this card is reachable from Metrics
+    // or Settings too, and the filter it applies only means something
+    // once you can see the feed it's filtering.
+    document.querySelector('.nav-item[data-view="logs"]')?.click();
+    injectQueryToken('level:error');
+  });
 }
 
 // ─────────────────────────────────────────

@@ -573,6 +573,33 @@ button, input, select, textarea { font-family: inherit; }
   margin-left: auto;
 }
 
+/* Error-rate card is a <button> (keyboard/focus support) standing in for
+   a <div>, so it needs the same resets the other three get for free. */
+.stat-rate {
+  font-family: inherit; font-size: inherit; text-align: left;
+  margin: 0; border: none; border-left: 2px solid transparent;
+  background: var(--surface);
+  cursor: pointer;
+}
+.stat-rate .stat-label::before { background: var(--text-dim); }
+.stat-rate .stat-value { color: var(--text); }
+.stat-rate:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+
+.stat-trend {
+  font-size: 11px; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  margin-left: 6px; white-space: nowrap;
+}
+.stat-trend.up    { color: var(--error); }
+.stat-trend.down  { color: var(--success); }
+.stat-trend.flat  { color: var(--text-dim); }
+
+/* Elevated = current 10-minute error rate is meaningfully above zero —
+   the whole point of this card is to be impossible to miss when it matters. */
+.stat-rate.elevated { border-left-color: var(--error); }
+.stat-rate.elevated .stat-label::before { background: var(--error); }
+.stat-rate.elevated .stat-value { color: var(--error); }
+
 /* ── Search + filter bar ── */
 .search-bar-wrap {
   display: flex; align-items: center; gap: 8px;
