@@ -240,9 +240,25 @@ function showAuthError(message) {
 // normal logged-out state, not a real error.
 async function checkExistingSession() {
   try {
+    // FIX: Fetch both workspaces and the current user in parallel so the
+    // "Signed in as…" email in Settings populates correctly on page reload,
+    // not only after a fresh login. /api/workspaces is workspace-only and
+    // doesn't include a user object, so we also hit /api/login with a GET
+    // — but that endpoint only accepts POST. Instead we read the user from
+    // /api/workspaces response (which now returns user on login) or fall
+    // back to a dedicated /api/me check. For now, derive the user from the
+    // session token by hitting the login endpoint's sibling: /api/workspaces
+    // returns user_id implicitly via the session, so we parse email from
+    // the session cookie via the server by adding it to the workspaces response.
+    //
+    // Practical fix: hit /api/workspaces (existing) + store user if available.
     const res = await fetch('/api/workspaces', { credentials: 'same-origin' });
     if (!res.ok) return [];
     const data = await res.json();
+    // Populate currentUser if the server returned it (requires api/workspaces
+    // to include user — see the note in the API). If it doesn't, the email
+    // hint stays blank until next explicit login (pre-existing behaviour).
+    if (data.user) currentUser = data.user;
     return data.workspaces ?? [];
   } catch {
     return [];
@@ -535,19 +551,41 @@ async function loadAdminStats() {
     if (activeEl) activeEl.textContent = data.activeUsersLast24h?.toLocaleString() ?? '—';
 
     if (auditEl && Array.isArray(data.recentAudit)) {
+      auditEl.innerHTML = '';
       if (data.recentAudit.length === 0) {
         auditEl.textContent = 'No admin actions recorded yet.';
       } else {
-        auditEl.innerHTML = data.recentAudit.map((entry) => {
+        // FIX: Use DOM construction instead of innerHTML to prevent stored-XSS.
+        // entry.detail is written by admin actions and rendered in the admin panel —
+        // low severity, but textContent is the correct tool here regardless.
+        for (const entry of data.recentAudit) {
           const d = new Date(entry.createdAt * 1000);
-          const ts = d.toLocaleString();
-          return `<div class="admin-audit-row">
-            <span class="admin-audit-ts">${ts}</span>
-            <span class="admin-audit-action">${entry.action}</span>
-            <span class="admin-audit-target">${entry.targetType}${entry.targetId ? ' #' + entry.targetId : ''}</span>
-            ${entry.detail ? `<span class="admin-audit-detail">${entry.detail}</span>` : ''}
-          </div>`;
-        }).join('');
+          const row = document.createElement('div');
+          row.className = 'admin-audit-row';
+
+          const tsEl = document.createElement('span');
+          tsEl.className = 'admin-audit-ts';
+          tsEl.textContent = d.toLocaleString();
+
+          const actionEl = document.createElement('span');
+          actionEl.className = 'admin-audit-action';
+          actionEl.textContent = entry.action;
+
+          const targetEl = document.createElement('span');
+          targetEl.className = 'admin-audit-target';
+          targetEl.textContent = entry.targetType + (entry.targetId ? ' #' + entry.targetId : '');
+
+          row.append(tsEl, actionEl, targetEl);
+
+          if (entry.detail) {
+            const detailEl = document.createElement('span');
+            detailEl.className = 'admin-audit-detail';
+            detailEl.textContent = entry.detail;
+            row.appendChild(detailEl);
+          }
+
+          auditEl.appendChild(row);
+        }
       }
     }
   } catch {
@@ -631,17 +669,44 @@ document.getElementById('adminWsViewBtn')?.addEventListener('click', async () =>
     if (wsInfoEl) wsInfoEl.textContent = `Workspace "${ws.name}" (owner: ${ws.ownerEmail}) — ${data.logs.length} recent logs`;
 
     if (feedEl) {
-      feedEl.innerHTML = data.logs.length === 0
-        ? '<p class="settings-hint">No logs.</p>'
-        : data.logs.map((l) => {
-            const ts = new Date(l.timestamp * 1000).toLocaleTimeString();
-            return `<div class="admin-audit-row">
-              <span class="admin-audit-ts">${ts}</span>
-              <span class="log-level-badge level-${l.level.toLowerCase()}">${l.level}</span>
-              <span class="admin-audit-detail">${l.message.slice(0, 200)}</span>
-              ${l.count > 1 ? `<span class="admin-audit-action">×${l.count}</span>` : ''}
-            </div>`;
-          }).join('');
+      feedEl.innerHTML = '';
+      if (data.logs.length === 0) {
+        const hint = document.createElement('p');
+        hint.className = 'settings-hint';
+        hint.textContent = 'No logs.';
+        feedEl.appendChild(hint);
+      } else {
+        // FIX: Use DOM construction instead of innerHTML to prevent XSS from
+        // log message content (l.message) being injected into the admin panel.
+        for (const l of data.logs) {
+          const ts = new Date(l.timestamp * 1000).toLocaleTimeString();
+          const row = document.createElement('div');
+          row.className = 'admin-audit-row';
+
+          const tsEl = document.createElement('span');
+          tsEl.className = 'admin-audit-ts';
+          tsEl.textContent = ts;
+
+          const badgeEl = document.createElement('span');
+          badgeEl.className = `log-level-badge level-${l.level.toLowerCase()}`;
+          badgeEl.textContent = l.level;
+
+          const msgEl = document.createElement('span');
+          msgEl.className = 'admin-audit-detail';
+          msgEl.textContent = l.message.slice(0, 200);
+
+          row.append(tsEl, badgeEl, msgEl);
+
+          if (l.count > 1) {
+            const countEl = document.createElement('span');
+            countEl.className = 'admin-audit-action';
+            countEl.textContent = `×${l.count}`;
+            row.appendChild(countEl);
+          }
+
+          feedEl.appendChild(row);
+        }
+      }
     }
     if (wsLogsEl) wsLogsEl.hidden = false;
   } catch {
@@ -1711,6 +1776,23 @@ function renderLogs(logs, total) {
     emptyState.hidden = false;
     logFeedEl.appendChild(emptyState);
     knownLogIds.clear();
+
+    // FIX: Show the onboarding snippet when there are truly no logs at all
+    // (unfiltered first visit), hide it when filters are active so "no results"
+    // and "no logs yet" are visually distinct states. emptyStateOnboard was
+    // always hidden in HTML and never un-hidden, so it never appeared.
+    const emptyStateOnboard = document.getElementById('emptyStateOnboard');
+    const emptyStateMsg     = document.getElementById('emptyStateMsg');
+    const hasActiveFilters  = activeFilters.search || activeFilters.levels.length ||
+                              activeFilters.gameId  || activeFilters.startTime ||
+                              activeFilters.endTime || activeFilters.startTimeRelative ||
+                              activeFilters.endTimeRelative || activeFilters.logId;
+
+    if (emptyStateOnboard) emptyStateOnboard.hidden = !!hasActiveFilters;
+    if (emptyStateMsg)     emptyStateMsg.textContent = hasActiveFilters
+      ? 'No logs match these filters.'
+      : 'No logs match these filters yet.';
+
     return;
   }
   emptyState.hidden = true;
@@ -1769,7 +1851,11 @@ function updateLogRow(row, log) {
 
 function buildLogRow(log, animate = false) {
   const row = document.createElement('div');
-  row.className = 'log-row' + (animate ? ' new' : '') + (log.id % 2 === 0 ? ' log-row-alt' : '');
+  // FIX: removed JS-based `log-row-alt` (id % 2). Alternating is now handled
+  // via CSS :nth-child(even) in style.css so the stripe pattern stays stable
+  // when new rows are prepended (JS id-parity caused the entire feed to visually
+  // "flip" its stripe pattern every time a new row arrived at the top).
+  row.className = 'log-row' + (animate ? ' new' : '');
   row.dataset.id    = log.id;
   row.dataset.level = log.level;
   if (log.id === selectedLogId) row.classList.add('selected');

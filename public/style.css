@@ -779,7 +779,11 @@ button, input, select, textarea { font-family: inherit; }
   cursor: pointer;
   transition: background 0.08s var(--ease), padding 0.12s var(--ease);
 }
-.log-row.log-row-alt { background: rgba(255,255,255,0.012); }
+/* FIX: use :nth-child instead of the old JS-assigned .log-row-alt class.
+   nth-child is DOM-position-based so the stripe stays visually stable
+   when new rows are prepended — the old JS approach re-striped the entire
+   feed every time a row arrived because it keyed off log.id parity. */
+.log-row:nth-child(even) { background: rgba(255,255,255,0.012); }
 .log-row.new         { animation: slideIn 0.22s var(--ease) forwards; }
 .log-row:last-child  { border-bottom: none; }
 .log-row:hover       { background: rgba(255,255,255,0.03); }

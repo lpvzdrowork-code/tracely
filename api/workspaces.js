@@ -9,7 +9,12 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const workspaces = await getWorkspacesForUser(user.id);
-    return res.status(200).json({ workspaces });
+    // FIX: Include the user object so the frontend can populate "Signed in as…"
+    // on page reload without requiring a fresh login. The session already contains
+    // id + email (written by createSessionToken), so we just surface them here.
+    // Previously this returned workspaces-only, leaving currentUser === null
+    // on reload, which meant the email hint in Settings never showed up.
+    return res.status(200).json({ user: { id: user.id, email: user.email }, workspaces });
   }
 
   if (req.method === 'POST') {
