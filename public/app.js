@@ -411,11 +411,27 @@ function unlockApp() {
   appEl.hidden = false;
   updateAccountInfo();
   startPolling();
+  // Silently probe admin status — if /api/admin/stats returns 200 the
+  // admin nav item is revealed via the _isAdminConfirmed flag. Non-admins
+  // get a 404 from the server which is simply swallowed here.
+  loadAdminStats().then(() => {
+    const adminNavItem = document.getElementById('adminNavItem');
+    if (adminNavItem) adminNavItem.hidden = !_isAdminConfirmed;
+  }).catch(() => {});
 }
 
 function updateAccountInfo() {
   if (accountEmailHint && currentUser) {
     accountEmailHint.textContent = `Signed in as ${currentUser.email}.`;
+  }
+  // Show the admin nav item only when the server-confirmed session email
+  // matches the ADMIN_EMAIL env var value that /api/admin/stats will gate on.
+  // This is purely cosmetic — the real access check happens server-side in
+  // requireAdmin(). A non-admin user who manually un-hides this element will
+  // just get 404s from every admin endpoint.
+  const adminNavItem = document.getElementById('adminNavItem');
+  if (adminNavItem) {
+    adminNavItem.hidden = !isAdminEmail(currentUser?.email);
   }
 }
 
@@ -429,6 +445,7 @@ async function lockApp(message) {
   currentUser = null;
   currentWorkspace = null;
   allWorkspaces = [];
+  _isAdminConfirmed = false;
   stopPolling();
   appEl.hidden = true;
   authOverlay.hidden = false;
@@ -462,8 +479,272 @@ navItems.forEach((btn) => {
     if (target) target.hidden = false;
 
     if (view === 'metrics' && chart) chart.update();
+    if (view === 'admin') loadAdminStats();
   });
 });
+
+// ─────────────────────────────────────────
+// Admin panel
+//
+// The isAdminEmail check here is cosmetic — it controls whether the nav
+// item and panel are visible. The real gate is server-side in requireAdmin()
+// (lib/admin-auth.js), which returns 404 for any session that isn't the
+// configured ADMIN_EMAIL. A non-admin who gets past the UI would just get
+// 404 back from every /api/admin/* call.
+// ─────────────────────────────────────────
+
+// The admin email is confirmed by the server; we read it from the session
+// that the server gave us. We don't embed ADMIN_EMAIL in the frontend bundle —
+// instead we trust the server to tell us the user's email, and gate the UI
+// on whether /api/admin/stats responds successfully.
+let _isAdminConfirmed = false;
+
+function isAdminEmail(email) {
+  // On first load we don't know ADMIN_EMAIL client-side, so we rely on the
+  // server responding 200 to /api/admin/stats to confirm admin status.
+  // Once confirmed once, _isAdminConfirmed is set and stays true for this
+  // session, so the nav item stays visible on subsequent view switches without
+  // a re-check.
+  return _isAdminConfirmed || false;
+}
+
+async function loadAdminStats() {
+  const errEl     = document.getElementById('adminStatsError');
+  const usersEl   = document.getElementById('adminStatUsers');
+  const wsEl      = document.getElementById('adminStatWorkspaces');
+  const totalEl   = document.getElementById('adminStatTotalLogs');
+  const logs24El  = document.getElementById('adminStatLogs24h');
+  const activeEl  = document.getElementById('adminStatActiveUsers');
+  const auditEl   = document.getElementById('adminAuditFeed');
+
+  if (errEl) errEl.hidden = true;
+
+  try {
+    const res = await fetch('/api/admin/stats', { credentials: 'same-origin' });
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = 'Failed to load stats.'; errEl.hidden = false; }
+      return;
+    }
+    const data = await res.json();
+    _isAdminConfirmed = true;
+
+    if (usersEl)  usersEl.textContent  = data.users?.toLocaleString() ?? '—';
+    if (wsEl)     wsEl.textContent     = data.workspaces?.toLocaleString() ?? '—';
+    if (totalEl)  totalEl.textContent  = data.totalLogs?.toLocaleString() ?? '—';
+    if (logs24El) logs24El.textContent = data.last24h?.total?.toLocaleString() ?? '—';
+    if (activeEl) activeEl.textContent = data.activeUsersLast24h?.toLocaleString() ?? '—';
+
+    if (auditEl && Array.isArray(data.recentAudit)) {
+      if (data.recentAudit.length === 0) {
+        auditEl.textContent = 'No admin actions recorded yet.';
+      } else {
+        auditEl.innerHTML = data.recentAudit.map((entry) => {
+          const d = new Date(entry.createdAt * 1000);
+          const ts = d.toLocaleString();
+          return `<div class="admin-audit-row">
+            <span class="admin-audit-ts">${ts}</span>
+            <span class="admin-audit-action">${entry.action}</span>
+            <span class="admin-audit-target">${entry.targetType}${entry.targetId ? ' #' + entry.targetId : ''}</span>
+            ${entry.detail ? `<span class="admin-audit-detail">${entry.detail}</span>` : ''}
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error loading stats.'; errEl.hidden = false; }
+  }
+}
+
+// Refresh button
+document.getElementById('adminStatsRefreshBtn')?.addEventListener('click', loadAdminStats);
+
+// ── User lookup ──────────────────────────────────────────────────────
+document.getElementById('adminUserLookupBtn')?.addEventListener('click', async () => {
+  const input   = document.getElementById('adminUserIdInput');
+  const resultEl = document.getElementById('adminUserResult');
+  const infoEl  = document.getElementById('adminUserInfo');
+  const selectEl = document.getElementById('adminWsSelect');
+  const errEl   = document.getElementById('adminUserError');
+  const wsLogsEl = document.getElementById('adminWsLogsResult');
+
+  if (errEl) errEl.hidden = true;
+  if (wsLogsEl) wsLogsEl.hidden = true;
+  if (resultEl) resultEl.hidden = true;
+
+  const userId = input?.value?.trim();
+  if (!userId || !/^\d+$/.test(userId)) {
+    if (errEl) { errEl.textContent = 'Enter a numeric user ID.'; errEl.hidden = false; }
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/user-view?userId=${encodeURIComponent(userId)}`, { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = data.error || 'Lookup failed.'; errEl.hidden = false; }
+      return;
+    }
+
+    if (infoEl) infoEl.textContent = `User #${data.user.id} — ${data.user.email} — ${data.workspaces.length} workspace(s)`;
+    if (selectEl) {
+      selectEl.innerHTML = '<option value="">— select workspace —</option>';
+      for (const ws of data.workspaces) {
+        const opt = document.createElement('option');
+        opt.value = ws.id;
+        opt.textContent = `#${ws.id} ${ws.name} (key: …${ws.apiKeyLast4})`;
+        selectEl.appendChild(opt);
+      }
+    }
+    const viewBtn = document.getElementById('adminWsViewBtn');
+    if (viewBtn) viewBtn.disabled = true;
+    selectEl?.addEventListener('change', () => {
+      if (viewBtn) viewBtn.disabled = !selectEl.value;
+    });
+    if (resultEl) resultEl.hidden = false;
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error.'; errEl.hidden = false; }
+  }
+});
+
+// View workspace logs button
+document.getElementById('adminWsViewBtn')?.addEventListener('click', async () => {
+  const selectEl  = document.getElementById('adminWsSelect');
+  const wsLogsEl  = document.getElementById('adminWsLogsResult');
+  const wsInfoEl  = document.getElementById('adminWsInfo');
+  const feedEl    = document.getElementById('adminWsLogsFeed');
+  const errEl     = document.getElementById('adminUserError');
+
+  const wid = selectEl?.value;
+  if (!wid) return;
+
+  if (errEl) errEl.hidden = true;
+
+  try {
+    const res = await fetch(`/api/admin/user-view?workspaceId=${encodeURIComponent(wid)}`, { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = data.error || 'Failed to load workspace.'; errEl.hidden = false; }
+      return;
+    }
+
+    const ws = data.workspace;
+    if (wsInfoEl) wsInfoEl.textContent = `Workspace "${ws.name}" (owner: ${ws.ownerEmail}) — ${data.logs.length} recent logs`;
+
+    if (feedEl) {
+      feedEl.innerHTML = data.logs.length === 0
+        ? '<p class="settings-hint">No logs.</p>'
+        : data.logs.map((l) => {
+            const ts = new Date(l.timestamp * 1000).toLocaleTimeString();
+            return `<div class="admin-audit-row">
+              <span class="admin-audit-ts">${ts}</span>
+              <span class="log-level-badge level-${l.level.toLowerCase()}">${l.level}</span>
+              <span class="admin-audit-detail">${l.message.slice(0, 200)}</span>
+              ${l.count > 1 ? `<span class="admin-audit-action">×${l.count}</span>` : ''}
+            </div>`;
+          }).join('');
+    }
+    if (wsLogsEl) wsLogsEl.hidden = false;
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error.'; errEl.hidden = false; }
+  }
+});
+
+// ── Impersonate user ─────────────────────────────────────────────────
+document.getElementById('adminImpersonateBtn')?.addEventListener('click', async () => {
+  const input    = document.getElementById('adminImpersonateUserIdInput');
+  const statusEl = document.getElementById('adminImpersonateStatus');
+  const errEl    = document.getElementById('adminImpersonateError');
+
+  if (statusEl) statusEl.hidden = true;
+  if (errEl)    errEl.hidden    = true;
+
+  const userId = input?.value?.trim();
+  if (!userId || !/^\d+$/.test(userId)) {
+    if (errEl) { errEl.textContent = 'Enter a numeric user ID.'; errEl.hidden = false; }
+    return;
+  }
+
+  if (!confirm(
+    `Start a 1-hour impersonation session as user #${userId}?\n\n` +
+    `Your current admin session will be replaced. You will need to log back in as yourself when done.`
+  )) return;
+
+  try {
+    const res = await fetch('/api/admin/impersonate', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: userId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = data.error || 'Impersonation failed.'; errEl.hidden = false; }
+      return;
+    }
+
+    // The server has already set the impersonation cookie — reload so the
+    // dashboard re-initialises as the target user. The admin panel nav item
+    // will disappear (the target user isn't admin), which is correct.
+    if (statusEl) {
+      statusEl.textContent = `Impersonating ${data.targetEmail}. Reloading…`;
+      statusEl.hidden = false;
+    }
+    setTimeout(() => window.location.reload(), 800);
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error.'; errEl.hidden = false; }
+  }
+});
+
+// ── Workspace control ────────────────────────────────────────────────
+async function adminWorkspaceAction(action) {
+  const widInput    = document.getElementById('adminCtrlWsIdInput');
+  const reasonInput = document.getElementById('adminCtrlReasonInput');
+  const statusEl    = document.getElementById('adminCtrlStatus');
+  const errEl       = document.getElementById('adminCtrlError');
+
+  if (statusEl) statusEl.hidden = true;
+  if (errEl)    errEl.hidden    = true;
+
+  const workspaceId = widInput?.value?.trim();
+  if (!workspaceId || !/^\d+$/.test(workspaceId)) {
+    if (errEl) { errEl.textContent = 'Enter a numeric workspace ID.'; errEl.hidden = false; }
+    return;
+  }
+
+  const confirmMsg = action === 'force-delete'
+    ? `Permanently delete workspace #${workspaceId} and ALL its logs? This cannot be undone.`
+    : `Clear all logs for workspace #${workspaceId}? This cannot be undone.`;
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch('/api/admin/workspace-control', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId, action, reason: reasonInput?.value?.trim() || undefined }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (errEl) { errEl.textContent = data.error || 'Action failed.'; errEl.hidden = false; }
+      return;
+    }
+    if (statusEl) {
+      statusEl.textContent = action === 'force-delete'
+        ? `Workspace #${workspaceId} permanently deleted.`
+        : `Cleared ${data.deleted?.toLocaleString()} log rows from workspace #${workspaceId}.`;
+      statusEl.hidden = false;
+    }
+    if (widInput)    widInput.value    = '';
+    if (reasonInput) reasonInput.value = '';
+    // Refresh audit log
+    loadAdminStats();
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error.'; errEl.hidden = false; }
+  }
+}
+
+document.getElementById('adminCtrlResetBtn')?.addEventListener('click', () => adminWorkspaceAction('reset-logs'));
+document.getElementById('adminCtrlDeleteBtn')?.addEventListener('click', () => adminWorkspaceAction('force-delete'));
 
 // ─────────────────────────────────────────
 // WORKSPACES (multi-workspace switcher)

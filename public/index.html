@@ -138,6 +138,16 @@
             <span class="nav-label">Settings</span>
           </button>
         </li>
+        <!-- Admin nav item — rendered only when app.js confirms the session email matches ADMIN_EMAIL -->
+        <li id="adminNavItem" hidden>
+          <button class="nav-item" data-view="admin" aria-label="Admin" title="Admin">
+            <!-- shield icon -->
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span class="nav-label">Admin</span>
+          </button>
+        </li>
       </ul>
 
       <div class="nav-footer">
@@ -407,6 +417,78 @@
                 </div>
                 <button id="nukeBtn" class="btn-danger">Clear logs…</button>
               </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Admin view — only reachable when admin nav item is visible -->
+        <div class="view" id="view-admin" hidden>
+          <div class="settings-scroll">
+
+            <div class="settings-card">
+              <h2 class="section-title">System Stats</h2>
+              <div id="adminStatsGrid" class="admin-stats-grid">
+                <div class="admin-stat"><span class="admin-stat-label">Users</span><span class="admin-stat-value" id="adminStatUsers">—</span></div>
+                <div class="admin-stat"><span class="admin-stat-label">Workspaces</span><span class="admin-stat-value" id="adminStatWorkspaces">—</span></div>
+                <div class="admin-stat"><span class="admin-stat-label">Total logs</span><span class="admin-stat-value" id="adminStatTotalLogs">—</span></div>
+                <div class="admin-stat"><span class="admin-stat-label">Logs (24h)</span><span class="admin-stat-value" id="adminStatLogs24h">—</span></div>
+                <div class="admin-stat"><span class="admin-stat-label">Active users (24h)</span><span class="admin-stat-value" id="adminStatActiveUsers">—</span></div>
+              </div>
+              <button id="adminStatsRefreshBtn" class="btn-ghost btn-sm" style="margin-top:12px">Refresh</button>
+              <p class="settings-hint" id="adminStatsError" hidden style="color:var(--color-error)"></p>
+            </div>
+
+            <div class="settings-card">
+              <h2 class="section-title">User Lookup</h2>
+              <p class="settings-hint">Inspect any user's workspaces and recent logs (read-only).</p>
+              <div class="ws-new-row">
+                <input id="adminUserIdInput" type="text" inputmode="numeric" class="filter-input" placeholder="User ID" autocomplete="off" />
+                <button id="adminUserLookupBtn" class="btn-primary btn-sm">Look up</button>
+              </div>
+              <div id="adminUserResult" hidden>
+                <p class="settings-hint" id="adminUserInfo"></p>
+                <select id="adminWsSelect" class="settings-select" style="margin-top:8px;width:100%">
+                  <option value="">— select workspace —</option>
+                </select>
+                <button id="adminWsViewBtn" class="btn-ghost btn-sm" style="margin-top:8px" disabled>View workspace logs</button>
+              </div>
+              <div id="adminWsLogsResult" hidden>
+                <p class="settings-hint" id="adminWsInfo"></p>
+                <div id="adminWsLogsFeed" class="admin-logs-feed"></div>
+              </div>
+              <p class="settings-hint" id="adminUserError" hidden style="color:var(--color-error)"></p>
+            </div>
+
+            <div class="settings-card">
+              <h2 class="section-title">Impersonate User</h2>
+              <p class="settings-hint">Issues a 1-hour session as the target user so you can see their dashboard exactly as they do. Your current admin session will be replaced — you will need to log back in as yourself afterward.</p>
+              <div class="ws-new-row">
+                <input id="adminImpersonateUserIdInput" type="text" inputmode="numeric" class="filter-input" placeholder="User ID" autocomplete="off" />
+                <button id="adminImpersonateBtn" class="btn-primary btn-sm">Start session</button>
+              </div>
+              <p class="settings-hint" id="adminImpersonateStatus" hidden></p>
+              <p class="settings-hint" id="adminImpersonateError" hidden style="color:var(--color-error)"></p>
+            </div>
+
+            <div class="settings-card settings-card-danger">
+              <h2 class="section-title">Workspace Control</h2>
+              <p class="settings-hint">Force-delete or reset a workspace. These actions are permanent and logged to the audit trail.</p>
+              <div class="ws-new-row">
+                <input id="adminCtrlWsIdInput" type="text" inputmode="numeric" class="filter-input" placeholder="Workspace ID" autocomplete="off" />
+                <input id="adminCtrlReasonInput" type="text" class="filter-input" placeholder="Reason (optional)" autocomplete="off" style="flex:2" />
+              </div>
+              <div class="modal-actions" style="margin-top:10px;gap:8px">
+                <button id="adminCtrlResetBtn" class="btn-ghost btn-sm">Reset logs</button>
+                <button id="adminCtrlDeleteBtn" class="btn-danger btn-sm">Force delete workspace</button>
+              </div>
+              <p class="settings-hint" id="adminCtrlStatus" hidden></p>
+              <p class="settings-hint" id="adminCtrlError" hidden style="color:var(--color-error)"></p>
+            </div>
+
+            <div class="settings-card">
+              <h2 class="section-title">Audit Log</h2>
+              <div id="adminAuditFeed" class="admin-logs-feed"></div>
             </div>
 
           </div>
